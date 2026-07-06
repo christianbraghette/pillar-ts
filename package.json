@@ -1,0 +1,53 @@
+{
+  "name": "pillar-ts",
+  "version": "0.1.0",
+  "description": "The foundational pillars for bulletproof TypeScript: Java-style Collections, Streams, Optional, and Result types for safer type-driven development.",
+  "keywords": [
+    "typescript",
+    "java",
+    "stream",
+    "optional",
+    "result",
+    "data-structures",
+    "collections",
+    "functional-programming",
+    "fluent-api",
+    "monad"
+  ],
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./collections": {
+      "import": "./dist/collections.js",
+      "require": "./dist/collections.js",
+      "types": "./dist/collections.d.ts"
+    },
+    "./maps": {
+      "import": "./dist/maps.js",
+      "require": "./dist/maps.js",
+      "types": "./dist/maps.d.ts"
+    },
+    "./stream": {
+      "import": "./dist/stream.js",
+      "require": "./dist/stream.js",
+      "types": "./dist/stream.d.ts"
+    },
+    "./utils": {
+      "import": "./dist/utils.js",
+      "require": "./dist/utils.js",
+      "types": "./dist/utils.d.ts"
+    }
+  },
+  "license": "Apache-2.0",
+  "author": "Christian Braghette",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "prepare": "tsc -b",
+    "pretest": "tsc -b",
+    "test": "node ./dist/test.js"
+  }
+}
