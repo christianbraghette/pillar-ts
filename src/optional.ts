@@ -53,7 +53,7 @@ export class Optional<T> {
 
     public map<S>(fn: Functional<T, S>): Optional<S> {
         if (this.#present) {
-            return Optional.ofNullable(fn(this.#value!));
+            return Optional.of(fn(this.#value!));
         }
         return Optional.empty();
     }
@@ -73,8 +73,8 @@ export class Optional<T> {
         return new Optional(true, value);
     }
 
-    public static ofNullable<S>(value: S): Optional<S> {
-        return new Optional(value !== null && value !== undefined, value);
+    public static ofNullable<S>(value: S): Optional<NonNullable<S>> {
+        return new Optional(value !== null && value !== undefined, value as NonNullable<S>);
     }
 }
 

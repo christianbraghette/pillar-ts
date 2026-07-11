@@ -72,8 +72,8 @@ export class Stream<T> implements Iterable<T>, AsyncIterable<T> {
         return this.#locked;
     }
 
-    /*public concat<S>(...others: Iterable<S>[]): SyncStream<T | S> {
-        return new SyncStream((function* (self: Iterable<T>) {
+    /*public concat<S>(...others: Iterable<S>[]): Stream<T | S> {
+        return new Stream((function* (self: Iterable<T>) {
             yield* self;
             for (const iterable of others)
                 yield* iterable;
