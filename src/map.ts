@@ -1,7 +1,7 @@
 import { KeyNotFoundError } from "./collections";
 import { Comparator, TriConsumer } from "./functional";
 import { LinkedList } from "./list";
-import { Throwable } from "./result";
+import { Result, Throwable } from "./result";
 import { Stream } from "./stream";
 import { NativeMap } from "./native";
 
@@ -115,7 +115,7 @@ export class HashMap<K, V> extends Map<K, V> {
      * Executes a provided function once per each key/value pair in the map.
      * @param callbackfn Function to execute for each element.
      */
-    public forEach(callbackfn: (value: V, key: K, obj: this) => void): void {
+    public forEach(callbackfn: TriConsumer<V, K, this>): void {
         for (const [key, value] of this.entries()) {
             callbackfn(value, key, this);
         }
@@ -157,6 +157,70 @@ export class HashMap<K, V> extends Map<K, V> {
 
     public static of<R, S>(...items: [R, S][]): HashMap<R, S> {
         return new HashMap(items);
+    }
+}
+
+export class LinkedHashMap<K, V> extends HashMap<K, V> {
+    #list = new LinkedList<K>();
+
+    public override set(key: K, value: V): this {
+        if (super.has(key))
+            this.#list.delete(key);
+        super.set(key, value);
+        return this;
+    }
+
+    public override add(...entries: [K, V][]): number {
+        let i = 0;
+        for (const [key, value] of entries) {
+            try {
+                if (super.has(key))
+                    this.#list.delete(key);
+                super.set(key, value);
+                i++;
+            } catch (error) { }
+        }
+        return i;
+    }
+
+    public override delete(...keys: K[]): number {
+        const size = super.size;
+        for (const key of keys) {
+            if (super.delete(key) > 0)
+                this.#list.delete(key);
+        }
+        return size - super.size;
+    }
+
+    public override clear(): void {
+        this.#list.clear();
+        super.clear();
+    }
+
+    public override keys(): Stream<K> {
+        return this.#list.stream();
+    }
+
+    public override values(): Stream<V> {
+        return this.#list.stream().map<V>((key) => super.get(key));
+    }
+
+    public override entries(): Stream<[K, V]> {
+        return this.#list.stream().map<[K, V]>((key) => [key, super.get(key)]);
+    }
+
+    public override *[Symbol.iterator](): IterableIterator<[K, V]> {
+        yield* this.entries();
+    }
+
+    override get [Symbol.toStringTag](): string { return "LinkedHashMap"; }
+
+    public static override from<R, S>(iterable: Iterable<[R, S]>): LinkedHashMap<R, S> {
+        return new LinkedHashMap(iterable);
+    }
+
+    public static override of<R, S>(...items: [R, S][]): LinkedHashMap<R, S> {
+        return new LinkedHashMap(items);
     }
 }
 
