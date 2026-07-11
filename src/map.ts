@@ -161,56 +161,19 @@ export class HashMap<K, V> extends Map<K, V> {
 }
 
 export class LinkedHashMap<K, V> extends HashMap<K, V> {
-    #list = new LinkedList<K>();
-
     public override set(key: K, value: V): this {
-        if (super.has(key))
-            this.#list.delete(key);
+        super.delete(key);
         super.set(key, value);
         return this;
     }
 
     public override add(...entries: [K, V][]): number {
-        let i = 0;
+        const size = this.size;
         for (const [key, value] of entries) {
-            try {
-                if (super.has(key))
-                    this.#list.delete(key);
-                super.set(key, value);
-                i++;
-            } catch (error) { }
+            super.delete(key);
+            super.set(key, value);
         }
-        return i;
-    }
-
-    public override delete(...keys: K[]): number {
-        const size = super.size;
-        for (const key of keys) {
-            if (super.delete(key) > 0)
-                this.#list.delete(key);
-        }
-        return size - super.size;
-    }
-
-    public override clear(): void {
-        this.#list.clear();
-        super.clear();
-    }
-
-    public override keys(): Stream<K> {
-        return this.#list.stream();
-    }
-
-    public override values(): Stream<V> {
-        return this.#list.stream().map<V>((key) => super.get(key));
-    }
-
-    public override entries(): Stream<[K, V]> {
-        return this.#list.stream().map<[K, V]>((key) => [key, super.get(key)]);
-    }
-
-    public override *[Symbol.iterator](): IterableIterator<[K, V]> {
-        yield* this.entries();
+        return this.size - size;
     }
 
     override get [Symbol.toStringTag](): string { return "LinkedHashMap"; }
