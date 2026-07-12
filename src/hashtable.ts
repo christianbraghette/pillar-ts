@@ -120,7 +120,7 @@ export class HashTable<K, V> {
         }
     }
 
-    public async *[Symbol.iterator](): AsyncIterableIterator<[K, V]> {
+    public async *[Symbol.asyncIterator](): AsyncIterableIterator<[K, V]> {
         const lock = await this.#map.acquire();
         try {
             yield* lock.get();
@@ -129,6 +129,14 @@ export class HashTable<K, V> {
         } finally {
             lock.release()
         }
+    }
+
+    public static from<R, S>(iterable: Iterable<[R, S]>): HashTable<R, S> {
+        return new HashTable(iterable);
+    }
+
+    public static of<R, S>(...items: [R, S][]): HashTable<R, S> {
+        return new HashTable(items);
     }
 }
 

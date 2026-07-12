@@ -142,17 +142,17 @@ enum Color {
     BLACK
 }
 
-class BSTNode {
-    public left?: BSTNode;
-    public right?: BSTNode;
-    public parent?: BSTNode;
+class TreeNode {
+    public left?: TreeNode;
+    public right?: TreeNode;
+    public parent?: TreeNode;
     public color: Color = Color.RED;
 }
 
 export class TreeSet<T> extends SortedSet<T> {
     #size: number = 0;
-    #data = new WeakMap<BSTNode, T>();
-    #root?: BSTNode;
+    #data = new WeakMap<TreeNode, T>();
+    #root?: TreeNode;
     #compareFn: Comparator<T>;
 
     /**
@@ -184,7 +184,7 @@ export class TreeSet<T> extends SortedSet<T> {
     public add(...items: T[]): number {
         const size = this.#size;
         for (const value of items) {
-            let y: BSTNode | undefined = undefined;
+            let y: TreeNode | undefined = undefined;
             let x = this.#root;
 
             while (x) {
@@ -194,7 +194,7 @@ export class TreeSet<T> extends SortedSet<T> {
                 x = comparison < 0 ? x.left : x.right;
             }
 
-            const z = new BSTNode();
+            const z = new TreeNode();
             this.#data.set(z, value);
             z.parent = y;
 
@@ -247,7 +247,7 @@ export class TreeSet<T> extends SortedSet<T> {
             if (!z) continue;
 
             let y = z;
-            let x: BSTNode | undefined;
+            let x: TreeNode | undefined;
             let yOriginalColor = y.color;
 
             if (!z.left) {
@@ -289,7 +289,7 @@ export class TreeSet<T> extends SortedSet<T> {
         this.#size = 0;
     }
 
-    #findNode(value: T): BSTNode | undefined {
+    #findNode(value: T): TreeNode | undefined {
         let current = this.#root;
         while (current) {
             const comparison = this.#compareFn(value, this.#data.get(current)!);
@@ -299,19 +299,19 @@ export class TreeSet<T> extends SortedSet<T> {
         return undefined;
     }
 
-    #minimum(node: BSTNode): BSTNode {
+    #minimum(node: TreeNode): TreeNode {
         while (node.left) node = node.left;
         return node;
     }
 
-    #transplant(u: BSTNode, v?: BSTNode): void {
+    #transplant(u: TreeNode, v?: TreeNode): void {
         if (!u.parent) this.#root = v;
         else if (u === u.parent.left) u.parent.left = v;
         else u.parent.right = v;
         if (v) v.parent = u.parent;
     }
 
-    #rotateLeft(x: BSTNode): void {
+    #rotateLeft(x: TreeNode): void {
         const y = x.right!;
         x.right = y.left;
         if (y.left) y.left.parent = x;
@@ -323,7 +323,7 @@ export class TreeSet<T> extends SortedSet<T> {
         x.parent = y;
     }
 
-    #rotateRight(y: BSTNode): void {
+    #rotateRight(y: TreeNode): void {
         const x = y.left!;
         y.left = x.right;
         if (x.right) x.right.parent = y;
@@ -335,7 +335,7 @@ export class TreeSet<T> extends SortedSet<T> {
         y.parent = x;
     }
 
-    #fixInsert(z: BSTNode): void {
+    #fixInsert(z: TreeNode): void {
         while (z.parent && z.parent.color === Color.RED) {
             if (z.parent === z.parent.parent?.left) {
                 const uncle = z.parent.parent.right;
@@ -374,7 +374,7 @@ export class TreeSet<T> extends SortedSet<T> {
         if (this.#root) this.#root.color = Color.BLACK;
     }
 
-    #fixDelete(x: BSTNode | undefined, xParent: BSTNode | undefined): void {
+    #fixDelete(x: TreeNode | undefined, xParent: TreeNode | undefined): void {
         while (x !== this.#root && (!x || x.color === Color.BLACK)) {
             if (xParent && x === xParent.left) {
                 let w = xParent.right;
@@ -549,7 +549,7 @@ export class TreeSet<T> extends SortedSet<T> {
      * Default iterator that returns values in sorted order.
      */
     *[Symbol.iterator](): IterableIterator<T> {
-        const stack = new LinkedList<BSTNode>();
+        const stack = new LinkedList<TreeNode>();
         let current = this.#root;
         while (stack.size > 0 || current) {
             while (current) {

@@ -1,4 +1,4 @@
-import { Deque, List, SortedList, ValueNotFoundError } from "./collections";
+import { Deque, List, SortedList } from "./collections";
 import { Comparator, TriConsumer } from "./functional";
 import { Throwable } from "./result";
 import { Stream } from "./stream";
@@ -107,8 +107,8 @@ export class ArrayList<T> extends List<T> implements Deque<T> {
         this.#data.forEach((v: T, i: number) => callbackfn(v, i, this));
     }
 
-    public toSortedList(comparator: Comparator<T>): SortedLinkedList<T> {
-        return new SortedLinkedList(comparator, this);
+    public toSortedList(comparator: Comparator<T>): TreeList<T> {
+        return new TreeList(comparator, this);
     }
 
     public toArray(): T[] {
@@ -577,8 +577,8 @@ export class LinkedList<T> extends List<T> implements Deque<T> {
         }
     }
 
-    public toSortedList(comparator: Comparator<T>): SortedLinkedList<T> {
-        return new SortedLinkedList(comparator, this);
+    public toSortedList(comparator: Comparator<T>): TreeList<T> {
+        return new TreeList(comparator, this);
     }
 
     public toArray(): T[] {
@@ -806,318 +806,370 @@ export class LinkedList<T> extends List<T> implements Deque<T> {
     }
 }
 
-export class SortedLinkedList<T> extends SortedList<T> {
-    #compareFn: (a: T, b: T) => number;
-    #data = new WeakMap<LinkedListNode, T>();
-    #head?: LinkedListNode;
-    #tail?: LinkedListNode;
-    #size: number = 0;
+type NodeColor = "RED" | "BLACK";
 
+class TreeNode {
+    left?: TreeNode;
+    right?: TreeNode;
+    parent?: TreeNode;
+    color: NodeColor = "RED";
+    count: number = 1;
+}
+
+export class TreeList<T> extends SortedList<T> {
+    #compareFn: Comparator<T>;
+    #data = new WeakMap<TreeNode, T>();
+    #root?: TreeNode;
+    #size: number = 0;
 
     constructor(compareFn: Comparator<T>, iterable?: Iterable<T>) {
         super();
         this.#compareFn = compareFn;
 
-        for (const item of iterable ?? [])
+        for (const item of iterable ?? []) {
             this.add(item);
+        }
     }
 
-    #getValue(node?: LinkedListNode): T | undefined {
-        return node ? this.#data.get(node) : undefined;
+    // --- Helper di Supporto RBT ---
+    #getColor(node?: TreeNode): NodeColor {
+        return node ? node.color : "BLACK"; // Le foglie/undefined sono nere
     }
 
-    #getNext(node?: LinkedListNode): LinkedListNode | undefined {
-        return node?.next;
+    #rotateLeft(x: TreeNode): void {
+        const y = x.right!;
+        x.right = y.left;
+
+        if (y.left) y.left.parent = x;
+        y.parent = x.parent;
+
+        if (!x.parent) this.#root = y;
+        else if (x === x.parent.left) x.parent.left = y;
+        else x.parent.right = y;
+
+        y.left = x;
+        x.parent = y;
     }
 
-    #setNext(curr: LinkedListNode, next: LinkedListNode | undefined): void {
-        curr.next = next;
-    }
+    #rotateRight(x: TreeNode): void {
+        const y = x.left!;
+        x.left = y.right;
 
-    #getPrev(node?: LinkedListNode): LinkedListNode | undefined {
-        return node?.prev;
-    }
+        if (y.right) y.right.parent = x;
+        y.parent = x.parent;
 
-    #setPrev(curr: LinkedListNode, prev: LinkedListNode | undefined): void {
-        curr.prev = prev;
+        if (!x.parent) this.#root = y;
+        else if (x === x.parent.right) x.parent.right = y;
+        else x.parent.left = y;
+
+        y.right = x;
+        x.parent = y;
     }
 
     public comparator(): Comparator<T> {
         return this.#compareFn;
     }
 
-    /**
-     * Returns the first element of the list.
-     */
-    public first(): Throwable<T> {
-        const value = this.#getValue(this.#head);
-        if (!value)
-            throw new Error();
-        return value;
-    }
-
-    /**
-     * Returns the last element of the list.
-     */
-    public last(): Throwable<T> {
-        const value = this.#getValue(this.#tail);
-        if (!value)
-            throw new Error();
-        return value;
+    public get size(): number {
+        return this.#size;
     }
 
     public clear(): void {
-        this.#head = undefined;
-        this.#tail = undefined;
+        this.#root = undefined;
         this.#size = 0;
     }
 
     /**
-     * Adds one or more elements to the end of the list.
-     * @param items The elements to add.
-     * @returns The new length of the list.
+     * Inserisce un elemento nell'albero e lo riabilancia modificando i colori e ruotando.
      */
     public add(...items: T[]): number {
-        const size = this.#size;
+        const initialSize = this.#size;
         for (const item of items) {
-            this.#insertOrdered(item, this.#compareFn)
+            this.#insertItem(item);
         }
-        return this.#size - size;
+        return this.#size - initialSize;
     }
 
-    #insertOrdered(item: T, compareFn: Comparator<T>): void {
-        const newNode = new LinkedListNode();
-
-        if (this.size === 0) {
-            this.#head = newNode;
-            this.#tail = newNode;
-            this.#data.set(newNode, item);
-            this.#size++;
-            return;
-        }
-
-        let current = this.#head;
-        let prevNode: LinkedListNode | undefined = undefined;
-
-        while (current) {
-            const currentVal = this.#getValue(current)!;
-
-            if (compareFn(item, currentVal) <= 0) {
-                break;
-            }
-            prevNode = current;
-            current = this.#getNext(current);
-        }
-
-        if (!prevNode) {
-            this.#setPrev(this.#head!, newNode);
-            this.#setNext(newNode, this.#head);
-            this.#head = newNode;
-        }
-        else if (!current) {
-            this.#setNext(prevNode, newNode);
-            this.#setPrev(newNode, prevNode);
-            this.#tail = newNode;
-        }
-        else {
-            this.#setNext(prevNode, newNode);
-            this.#setPrev(newNode, prevNode);
-            this.#setNext(newNode, current);
-            this.#setPrev(current, newNode);;
-        }
-
+    #insertItem(item: T): void {
+        const newNode = new TreeNode();
         this.#data.set(newNode, item);
-        this.#size++;
-    }
 
-    /**
-     * Removes and returns the last element of the list.
-     */
-    public removeLast(): Throwable<T> {
-        const nodeToRemove = this.#tail;
-        if (!nodeToRemove) throw new Error();
+        let y: TreeNode | undefined = undefined;
+        let x = this.#root;
 
-        const value = this.#getValue(nodeToRemove)!;
-        const newTail = this.#getPrev(nodeToRemove);
+        while (x) {
+            y = x;
+            const currentVal = this.#data.get(x)!;
+            const cmp = this.#compareFn(item, currentVal);
 
-        this.#tail = newTail;
-        if (this.#tail)
-            this.#setNext(this.#tail, undefined);
-        else
-            this.#head = undefined;
-
-        nodeToRemove.next = undefined;
-        nodeToRemove.prev = undefined;
-
-        this.#data.delete(nodeToRemove);
-        this.#size--;
-        return value;
-    }
-
-    /**
-     * Removes and returns the first element of the list.
-     */
-    public remove(): Throwable<T> {
-        const nodeToRemove = this.#head;
-        if (!nodeToRemove) throw new Error();
-
-        const value = this.#getValue(nodeToRemove)!;
-        const newHead = this.#getNext(nodeToRemove);
-
-        this.#head = newHead;
-
-        if (this.#head) {
-            this.#setPrev(this.#head, undefined);
-        } else {
-            this.#tail = undefined;
-        }
-
-        nodeToRemove.next = undefined;
-        nodeToRemove.prev = undefined;
-
-        this.#data.delete(nodeToRemove);
-        this.#size--;
-        return value;
-    }
-
-    //### LINEAR METHODS
-
-    /**
-     * Gets the number of elements in the list.
-     */
-    public get size(): number {
-        return this.#size;
-    };
-
-    /**
-     * Determines whether the list includes a certain value.
-     * @param searchElement The element to search for.
-     */
-    public has(...items: T[]): boolean {
-        if (items.length === 0) return false;
-        let set = new NativeSet(items);
-        for (const item of this) {
-            if (set.has(item)) {
-                set.delete(item);
+            if (cmp === 0) {
+                x.count++;
+                this.#size++;
+                return;
             }
-            if (set.size === 0) return true;
+            x = cmp < 0 ? x.left : x.right;
         }
-        return false;
+
+        newNode.parent = y;
+        this.#size++;
+
+        if (!y) {
+            this.#root = newNode;
+        } else {
+            const yVal = this.#data.get(y)!;
+            if (this.#compareFn(item, yVal) < 0) y.left = newNode;
+            else y.right = newNode;
+        }
+
+        this.#fixInsert(newNode);
     }
 
-    /**
-     * Removes specific elements from the list and maintains structural integrity.
-     * @param items The elements to remove.
-     * @returns The number of elements actually removed.
-     */
+    #fixInsert(z: TreeNode): void {
+        while (z.parent && z.parent.color === "RED") {
+            if (z.parent === z.parent.parent?.left) {
+                const uncle = z.parent.parent.right;
+                if (this.#getColor(uncle) === "RED") {
+                    z.parent.color = "BLACK";
+                    uncle!.color = "BLACK";
+                    z.parent.parent.color = "RED";
+                    z = z.parent.parent;
+                } else {
+                    if (z === z.parent.right) {
+                        z = z.parent;
+                        this.#rotateLeft(z);
+                    }
+                    z.parent!.color = "BLACK";
+                    z.parent!.parent!.color = "RED";
+                    this.#rotateRight(z.parent!.parent!);
+                }
+            } else {
+                const uncle = z.parent.parent?.left;
+                if (this.#getColor(uncle) === "RED") {
+                    z.parent.color = "BLACK";
+                    uncle!.color = "BLACK";
+                    z.parent.parent!.color = "RED";
+                    z = z.parent.parent!;
+                } else {
+                    if (z === z.parent.left) {
+                        z = z.parent;
+                        this.#rotateRight(z);
+                    }
+                    z.parent!.color = "BLACK";
+                    z.parent!.parent!.color = "RED";
+                    this.#rotateLeft(z.parent!.parent!);
+                }
+            }
+        }
+        this.#root!.color = "BLACK";
+    }
+
     public delete(...items: T[]): number {
         const initialSize = this.#size;
         if (initialSize === 0 || items.length === 0) return 0;
 
-        // Usiamo un contatore per tracciare quante occorrenze di ciascun elemento dobbiamo rimuovere
         const itemsToRemove = new Map<T, number>();
         for (const item of items) {
             itemsToRemove.set(item, (itemsToRemove.get(item) ?? 0) + 1);
         }
 
-        let node = this.#head;
-        while (node && itemsToRemove.size > 0) {
-            const nextNode = this.#getNext(node);
-            const value = this.#data.get(node)!;
+        for (const [item, countToRem] of itemsToRemove.entries()) {
+            let needed = countToRem;
+            while (needed > 0) {
+                const node = this.#findNode(this.#root, item);
+                if (!node) break;
 
-            if (itemsToRemove.has(value)) {
-                const prevNode = this.#getPrev(node);
-
-                // Aggiorna i collegamenti dei nodi adiacenti
-                if (prevNode) this.#setNext(prevNode, nextNode);
-                else this.#head = nextNode;
-
-                if (nextNode) this.#setPrev(nextNode, prevNode);
-                else this.#tail = prevNode;
-
-                node.next = undefined;
-                node.prev = undefined;
-                this.#data.delete(node);
-                this.#size--;
-
-                const remaining = itemsToRemove.get(value)! - 1;
-                if (remaining === 0) {
-                    itemsToRemove.delete(value);
+                if (node.count > 1) {
+                    node.count--;
+                    this.#size--;
                 } else {
-                    itemsToRemove.set(value, remaining);
+                    this.#deleteNode(node);
                 }
+                needed--;
             }
-            node = nextNode;
         }
 
         return initialSize - this.#size;
     }
 
-    //### INDEXABLE METHODS
+    #deleteNode(z: TreeNode): void {
+        let y = z;
+        let yOriginalColor = y.color;
+        let x: TreeNode | undefined;
 
-    /**
-     * Returns the element at the specified index. Supports negative indexing.
-     * @param index Zero-based index.
-     */
+        if (!z.left) {
+            x = z.right;
+            this.#transplant(z, z.right);
+        } else if (!z.right) {
+            x = z.left;
+            this.#transplant(z, z.left);
+        } else {
+            // Successore in-order
+            y = z.right;
+            while (y.left) y = y.left;
+
+            yOriginalColor = y.color;
+            x = y.right;
+
+            if (y.parent === z) {
+                if (x) x.parent = y;
+            } else {
+                this.#transplant(y, y.right);
+                y.right = z.right;
+                y.right.parent = y;
+            }
+
+            this.#transplant(z, y);
+            y.left = z.left;
+            y.left.parent = y;
+            y.color = z.color;
+        }
+
+        this.#data.delete(z);
+        this.#size--;
+
+        if (yOriginalColor === "BLACK" && x) {
+            this.#fixDelete(x);
+        }
+    }
+
+    #transplant(u: TreeNode, v?: TreeNode): void {
+        if (!u.parent) this.#root = v;
+        else if (u === u.parent.left) u.parent.left = v;
+        else u.parent.right = v;
+        if (v) v.parent = u.parent;
+    }
+    #fixDelete(x: TreeNode): void {
+        while (x !== this.#root && x.color === "BLACK") {
+            if (x === x.parent!.left) {
+                let sibling = x.parent!.right;
+                if (this.#getColor(sibling) === "RED") {
+                    sibling!.color = "BLACK";
+                    x.parent!.color = "RED";
+                    this.#rotateLeft(x.parent!);
+                    sibling = x.parent!.right;
+                }
+                if (this.#getColor(sibling?.left) === "BLACK" && this.#getColor(sibling?.right) === "BLACK") {
+                    if (sibling) sibling.color = "RED";
+                    x = x.parent!;
+                } else {
+                    if (this.#getColor(sibling?.right) === "BLACK") {
+                        if (sibling?.left) sibling.left.color = "BLACK";
+                        if (sibling) sibling.color = "RED";
+                        this.#rotateRight(sibling!);
+                        sibling = x.parent!.right;
+                    }
+                    if (sibling) sibling.color = x.parent!.color;
+                    x.parent!.color = "BLACK";
+                    if (sibling?.right) sibling.right.color = "BLACK";
+                    this.#rotateLeft(x.parent!);
+                    x = this.#root!;
+                }
+            } else {
+                let sibling = x.parent!.left;
+                if (this.#getColor(sibling) === "RED") {
+                    sibling!.color = "BLACK";
+                    x.parent!.color = "RED";
+                    this.#rotateRight(x.parent!);
+                    sibling = x.parent!.left;
+                }
+                if (this.#getColor(sibling?.right) === "BLACK" && this.#getColor(sibling?.left) === "BLACK") {
+                    if (sibling) sibling.color = "RED";
+                    x = x.parent!;
+                } else {
+                    if (this.#getColor(sibling?.left) === "BLACK") {
+                        if (sibling?.right) sibling.right.color = "BLACK";
+                        if (sibling) sibling.color = "RED";
+                        this.#rotateLeft(sibling!);
+                        sibling = x.parent!.left;
+                    }
+                    if (sibling) sibling.color = x.parent!.color;
+                    x.parent!.color = "BLACK";
+                    if (sibling?.left) sibling.left.color = "BLACK";
+                    this.#rotateRight(x.parent!);
+                    x = this.#root!;
+                }
+            }
+        }
+        x.color = "BLACK";
+    }
+
+    public first(): Throwable<T> {
+        if (!this.#root) throw new Error("List is empty");
+        let curr = this.#root;
+        while (curr.left) curr = curr.left;
+        return this.#data.get(curr)!;
+    }
+
+    public last(): Throwable<T> {
+        if (!this.#root) throw new Error("List is empty");
+        let curr = this.#root;
+        while (curr.right) curr = curr.right;
+        return this.#data.get(curr)!;
+    }
+
+    public remove(): Throwable<T> {
+        const val = this.first();
+        this.delete(val);
+        return val;
+    }
+
+    public removeLast(): Throwable<T> {
+        const val = this.last();
+        this.delete(val);
+        return val;
+    }
+
+    public has(...items: T[]): boolean {
+        if (items.length === 0) return false;
+        for (const item of items) {
+            if (!this.#findNode(this.#root, item)) return false;
+        }
+        return true;
+    }
+
+    #findNode(node: TreeNode | undefined, item: T): TreeNode | undefined {
+        if (!node) return undefined;
+        const cmp = this.#compareFn(item, this.#data.get(node)!);
+        if (cmp === 0) return node;
+        return cmp < 0 ? this.#findNode(node.left, item) : this.#findNode(node.right, item);
+    }
+
     public get(index: number): Throwable<T> {
         let target = index < 0 ? this.size + index : index;
-        if (target < 0 || target >= this.size) throw new Error();
+        if (target < 0 || target >= this.size) throw new Error("Index out of bounds");
 
-        const fromStart = target < this.size / 2;
-        let curr = fromStart ? this.#head : this.#tail;
-        let count = fromStart ? 0 : this.size - 1;
-
-        while (curr) {
-            if (count === target) {
-                const value = this.#getValue(curr);
-                if (!value)
-                    throw new Error();
-                return value
-            }
-            curr = fromStart ? this.#getNext(curr) : this.#getPrev(curr);
-            fromStart ? count++ : count--;
+        let currIdx = 0;
+        for (const val of this) {
+            if (currIdx === target) return val as Throwable<T>;
+            currIdx++;
         }
         throw new Error();
     }
 
-    /**
-     * Returns the index of the first occurrence of a value.
-     * @param searchElement The element to locate.
-     * @param fromIndex The index to start the search from.
-     */
     public indexOf(searchElement: T, fromIndex: number = 0): number {
-        let i = 0;
         let start = fromIndex < 0 ? Math.max(this.size + fromIndex, 0) : fromIndex;
-
-        for (let node = this.#head; !!node; node = this.#getNext(node)) {
-            if (i >= start && this.#getValue(node) === searchElement) return i;
+        let i = 0;
+        for (const val of this) {
+            if (i >= start && val === searchElement) return i;
             i++;
         }
         return -1;
     }
 
-    /**
-     * Returns the index of the last occurrence of a value.
-     * @param searchElement The element to locate.
-     * @param fromIndex The index to start the search from (searching backwards).
-     */
     public lastIndexOf(searchElement: T, fromIndex: number = this.size - 1): number {
-        let i = this.size - 1;
         let start = fromIndex < 0 ? this.size + fromIndex : fromIndex;
-
-        for (let node = this.#tail; !!node; node = this.#getPrev(node)) {
-            if (i <= start && this.#getValue(node) === searchElement) return i;
-            i--;
+        let i = 0;
+        let lastIdx = -1;
+        for (const val of this) {
+            if (i <= start && val === searchElement) {
+                lastIdx = i;
+            }
+            i++;
         }
-        return -1;
+        return lastIdx;
     }
 
-    /**
-     * Returns a new LinkedList containing a portion of the list.
-     * @param start The beginning index.
-     * @param end The end index (exclusive).
-     */
-    public slice(start: number = 0, end: number = this.size): SortedLinkedList<T> {
+    public slice(start: number = 0, end: number = this.size): TreeList<T> {
         const s = start < 0 ? Math.max(this.size + start, 0) : Math.min(start, this.size);
         const e = end < 0 ? Math.max(this.size + end, 0) : Math.min(end, this.size);
 
@@ -1130,18 +1182,11 @@ export class SortedLinkedList<T> extends SortedList<T> {
                 i++;
             }
         };
-        return new SortedLinkedList<T>(this.#compareFn, sliceGenerator());
-    }
-
-    public forEach(callbackfn: TriConsumer<T, number, this>): void {
-        let i = 0;
-        for (const value of this) {
-            callbackfn(value, i++, this);
-        }
+        return new TreeList<T>(this.#compareFn, sliceGenerator());
     }
 
     public head(item: T): SortedList<T> {
-        const subList = new SortedLinkedList<T>(this.#compareFn);
+        const subList = new TreeList<T>(this.#compareFn);
         for (const currentVal of this) {
             if (this.#compareFn(currentVal, item) <= 0) {
                 subList.add(currentVal);
@@ -1153,7 +1198,7 @@ export class SortedLinkedList<T> extends SortedList<T> {
     }
 
     public tail(item: T): SortedList<T> {
-        const subList = new SortedLinkedList<T>(this.#compareFn);
+        const subList = new TreeList<T>(this.#compareFn);
         let startAdding = false;
         for (const currentVal of this) {
             if (!startAdding && this.#compareFn(currentVal, item) >= 0) {
@@ -1166,76 +1211,59 @@ export class SortedLinkedList<T> extends SortedList<T> {
         return subList;
     }
 
-    public toList(): List<T> {
-        return new LinkedList(this);
-    }
-
-    public toArray(): T[] {
-        return Array.from(this);
-    }
-
-    public stream(): Stream<T> {
-        return new Stream(this);
-    }
-
-    //### SPECIFIC METHODS
-
-    /**
-     * Remove duplicate elements in the list.
-     */
     public deduplicate(): this {
-        const seen = new Set<T>();
-        return this.#filterInPlace((val) => {
-            if (seen.has(val)) return false;
-            seen.add(val);
-            return true;
-        });
-    }
+        const resetCount = (node?: TreeNode) => {
+            if (!node) return;
+            node.count = 1;
+            resetCount(node.left);
+            resetCount(node.right);
+        };
+        resetCount(this.#root);
 
-    #filterInPlace(predicate: (value: T, index: number, obj: this) => boolean): this {
-        let node = this.#head;
-        let i = 0;
+        let newSize = 0;
+        const countNodes = (node?: TreeNode) => {
+            if (!node) return;
+            newSize++;
+            countNodes(node.left);
+            countNodes(node.right);
+        };
+        countNodes(this.#root);
+        this.#size = newSize;
 
-        while (node) {
-            const val = this.#getValue(node)!;
-            const next = this.#getNext(node);
-
-            if (!predicate(val, i++, this)) {
-                const p = this.#getPrev(node);
-                const n = this.#getNext(node);
-
-                if (p) this.#setNext(p, n);
-                else this.#head = n;
-
-                if (n) this.#setPrev(n, p);
-                else this.#tail = p;
-
-                node.next = undefined;
-                node.prev = undefined;
-
-                this.#data.delete(node);
-                this.#size--;
-            }
-            node = next;
-        }
         return this;
     }
 
-    /**
-     * Default iterator for the list.
-     */
+    public forEach(callbackfn: TriConsumer<T, number, this>): void {
+        let i = 0;
+        for (const value of this) {
+            callbackfn(value, i++, this);
+        }
+    }
+
+    public toList(): List<T> { return new LinkedList(this); }
+    public toArray(): T[] { return Array.from(this); }
+    public stream(): Stream<T> { return new Stream(this); }
+
     *[Symbol.iterator](): IterableIterator<T> {
-        for (let node = this.#head; !!node; node = this.#getNext(node))
-            yield this.#getValue(node)!;
+        const self = this;
+        function* traverse(node?: TreeNode): Generator<T> {
+            if (!node) return;
+            yield* traverse(node.left);
+            for (let i = 0; i < node.count; i++) {
+                yield self.#data.get(node)!;
+            }
+            yield* traverse(node.right);
+        }
+        yield* traverse(this.#root);
     }
 
-    get [Symbol.toStringTag](): string { return "SortedLinkedList" };
+    get [Symbol.toStringTag](): string { return "TreeList"; }
 
-    public static from<S>(compareFn: Comparator<S>, iterable: Iterable<S>): SortedLinkedList<S> {
-        return new SortedLinkedList(compareFn, iterable);
+    public static from<S>(compareFn: Comparator<S>, iterable: Iterable<S>): TreeList<S> {
+        return new TreeList(compareFn, iterable);
     }
 
-    public static of<S>(compareFn: Comparator<S>, ...items: S[]): SortedLinkedList<S> {
-        return new SortedLinkedList(compareFn, items);
+    public static of<S>(compareFn: Comparator<S>, ...items: S[]): TreeList<S> {
+        return new TreeList(compareFn, items);
     }
 }

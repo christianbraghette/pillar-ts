@@ -86,7 +86,7 @@ export abstract class SortedSet<T> extends Set<T> {
     abstract slice(fromKey: T, toKey: T): SortedSet<T>;
 }
 
-export { LinkedList, ArrayList, SortedLinkedList } from "./list";
+export { LinkedList, ArrayList, TreeList } from "./list";
 export { PriorityQueue } from "./queue";
 export { HashSet, TreeSet } from "./set";
 export { LinkedStack } from "./stack";

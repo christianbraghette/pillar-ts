@@ -71,7 +71,7 @@ export class Dictionary<T> {
         return "Dictionary";
     }
 
-    public static of<S>(obj: Record<keyof any[], S>): Dictionary<S> {
+    public static of<S>(obj: Record<keyof any, S>): Dictionary<S> {
         return new Dictionary(Object.entries(obj));
     }
 
