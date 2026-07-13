@@ -36,7 +36,6 @@ abstract class DirectedGraph<V, E> {
 }
 
 export class MapGraph<V, E> extends Graph<V, E> {
-    // Struttura: NodoSorgente -> Map(NodoDestinazione -> Array di Archi)
     protected adjList = new Map<V, Map<V, E[]>>();
     protected _size = 0;
 

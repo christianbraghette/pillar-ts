@@ -2,7 +2,7 @@ import { Structure } from ".";
 import { Collection, KeyNotFoundError } from "./collections";
 import { Dictionary } from "./dictionary";
 import { BiConsumer, BiFunctional, BiPredicate, Comparator, Executor, Functional, MultiFunctional } from "./functional";
-import { ArrayList, LinkedList, SortedLinkedList } from "./list";
+import { ArrayList, LinkedList, TreeList } from "./list";
 import { HashMap, TreeMap } from "./map";
 import { PriorityQueue } from "./queue";
 import { Throwable } from "./result";
@@ -12,8 +12,8 @@ import { HashSet, TreeSet } from "./set";
 export type Collector<T, C extends Structure> = Functional<Iterable<T>, C>;
 
 export class Collectors {
-    public static Dictionary<T>(): (iterable: Iterable<[string | number, T]>) => Dictionary<T> {
-        return (iterable: Iterable<[string | number, T]>) => new Dictionary(iterable);
+    public static Dictionary<T>(): (iterable: Iterable<[keyof any, T]>) => Dictionary<T> {
+        return (iterable: Iterable<[keyof any, T]>) => new Dictionary(iterable);
     }
 
     public static ArrayList<T>(): (iterable: Iterable<T>) => ArrayList<T> {
@@ -24,8 +24,8 @@ export class Collectors {
         return (iterable: Iterable<T>) => new LinkedList(iterable);
     }
 
-    public static SortedLinkedList<T>(compareFn: Comparator<T>): (iterable: Iterable<T>) => SortedLinkedList<T> {
-        return (iterable: Iterable<T>) => new SortedLinkedList(compareFn, iterable);
+    public static SortedLinkedList<T>(compareFn: Comparator<T>): (iterable: Iterable<T>) => TreeList<T> {
+        return (iterable: Iterable<T>) => new TreeList(compareFn, iterable);
     }
 
     public static HashSet<T>(): (iterable: Iterable<T>) => HashSet<T> {
@@ -187,16 +187,16 @@ export class Stream<T> implements Iterable<T>, AsyncIterable<T> {
         );
     }
 
-    public flatMap<U>(callbackfn: BiFunctional<T, number, U | U[]>): Stream<U> {
+    public flatMap<U>(callbackfn: BiFunctional<T, number, U | Stream<U>>): Stream<U> {
         const source = this.#lock();
         return new Stream((function* () {
             let i = 0
             for (const value of source) {
                 const mapped = callbackfn(value, i++);
-                if (mapped != null && Array.isArray(mapped)) {
+                if (mapped instanceof Stream) {
                     yield* mapped;
                 } else {
-                    yield mapped as U;
+                    yield mapped;
                 }
             }
         })()
@@ -280,7 +280,7 @@ export class Stream<T> implements Iterable<T>, AsyncIterable<T> {
     public sort(compareFn: Comparator<T>): Stream<T> {
         const source = this.#lock();
         return new Stream((function* () {
-            yield* new SortedLinkedList(compareFn, source);
+            yield* new TreeList(compareFn, source);
         })())
     }
 
@@ -395,6 +395,20 @@ export class Stream<T> implements Iterable<T>, AsyncIterable<T> {
     }
 
     get [Symbol.toStringTag](): string { return "SyncStream"; }
+
+    public static join<S extends any[]>(...iterables: Iterable<S[keyof S]>[]): Stream<S> {
+        const iterators = iterables.map(val => val[Symbol.iterator]()) as Iterator<S>[];
+
+        return new Stream(
+            (function* () {
+                while (true) {
+                    var res = iterators.map(val => val.next());
+                    if (res.some(val => val.done)) break;
+                    yield res.map(val => val.value) as S;
+                };
+            })()
+        );
+    }
 
     public static of<S>(...items: S[]): Stream<S> {
         return new Stream(items);

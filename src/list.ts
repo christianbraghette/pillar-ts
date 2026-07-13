@@ -1,4 +1,4 @@
-import { Deque, List, SortedList } from "./collections";
+import { Deque, List, Queue, SortedList, SortedQueue } from "./collections";
 import { Comparator, TriConsumer } from "./functional";
 import { Throwable } from "./result";
 import { Stream } from "./stream";
@@ -816,7 +816,7 @@ class TreeNode {
     count: number = 1;
 }
 
-export class TreeList<T> extends SortedList<T> {
+export class TreeList<T> extends SortedList<T> implements SortedQueue<T> {
     #compareFn: Comparator<T>;
     #data = new WeakMap<TreeNode, T>();
     #root?: TreeNode;

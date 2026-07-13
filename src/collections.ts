@@ -60,6 +60,8 @@ export interface Queue<T> extends Collection<T> {
     remove(): Throwable<T>;
 }
 
+export interface SortedQueue<T> extends Queue<T> {}
+
 export interface Deque<T> extends Queue<T> {
     last(): Throwable<T>;
     addFirst(...items: T[]): number;

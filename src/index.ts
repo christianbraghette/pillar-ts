@@ -1,7 +1,8 @@
 import type { Collection } from "./collections";
+import { Dictionary } from "./dictionary";
 import type { Map } from "./map";
 
-export type Structure = Collection<any> | Map<any, any>;
+export type Structure = Collection<any> | Map<any, any> | Dictionary<any>;
 
 //Utils
 export { Optional } from "./optional";
@@ -16,7 +17,7 @@ export * from "./stream";
 //Collections
 export {
     Collection, List, Queue, Deque, Set, SortedSet,
-    Stack, LinkedList, ArrayList, SortedLinkedList,
+    Stack, LinkedList, ArrayList, TreeList,
     PriorityQueue, HashSet, TreeSet, LinkedStack
 } from "./collections";
 

@@ -4,9 +4,9 @@ import { Stream } from "./stream";
 export class Dictionary<T> {
     [key: string | number]: T;
 
-    #data : Map<string, T>;
+    #data: Map<string, T>;
 
-    constructor(iterable?: Iterable<[string | number, T]>) {
+    constructor(iterable?: Iterable<[keyof any, T]>) {
         this.#data = new Map<string, T>(Stream.from(iterable ?? []).map(([key, value]) => [String(key), value]))
         return new Proxy(this, {
             get(target, prop) {
@@ -75,7 +75,7 @@ export class Dictionary<T> {
         return new Dictionary(Object.entries(obj));
     }
 
-    public static from<S>(iterable: Iterable<[string | number, S]>): Dictionary<S> {
+    public static from<S>(iterable: Iterable<[keyof any, S]>): Dictionary<S> {
         return new Dictionary(iterable);
     }
 }
