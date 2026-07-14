@@ -1,6 +1,6 @@
 import { Stream } from "./stream";
 
-abstract class Graph<V, E> {
+export abstract class Graph<V, E> {
     abstract readonly size: number;
     abstract readonly order: number;
 
@@ -27,7 +27,7 @@ abstract class Graph<V, E> {
     abstract vertices(): Stream<V>;
 }
 
-abstract class DirectedGraph<V, E> {
+export abstract class DirectedGraph<V, E> {
     abstract inDegree(x: V): number;
     abstract outDegree(x: V): number;
 

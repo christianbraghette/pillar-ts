@@ -1,4 +1,4 @@
-import { Set, SortedSet, ValueNotFoundError } from "./collections";
+import { Set, SortedSet, EmptyStructureError } from "./collections";
 import { Comparator } from "./functional";
 import { LinkedList } from "./list";
 import { Throwable } from "./result";
@@ -129,7 +129,7 @@ export class HashSet<T> extends Set<T> {
     }
 
     stream(): Stream<T> {
-        return new Stream(this);
+        return Stream.from(this);
     }
 
     [Symbol.iterator](): IterableIterator<T> {
@@ -443,17 +443,17 @@ export class TreeSet<T> extends SortedSet<T> {
         }
     }
 
-    public first(): Throwable<T> {
+    public first(): Throwable<T, EmptyStructureError> {
         if (!this.#root) {
-            throw new Error();
+            throw new EmptyStructureError(TreeSet.name);
         }
         const minNode = this.#minimum(this.#root);
         return this.#data.get(minNode)!;
     }
 
-    public last(): Throwable<T> {
+    public last(): Throwable<T, EmptyStructureError> {
         if (!this.#root) {
-            throw new Error();
+            throw new EmptyStructureError(TreeSet.name);
         }
         let node = this.#root;
         while (node.right) {
@@ -542,7 +542,7 @@ export class TreeSet<T> extends SortedSet<T> {
     }
 
     public stream(): Stream<T> {
-        return new Stream(this);
+        return Stream.from(this);
     }
 
     /**

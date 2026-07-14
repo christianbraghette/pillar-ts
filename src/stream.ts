@@ -1,15 +1,15 @@
-import { Structure } from ".";
 import { Collection, KeyNotFoundError } from "./collections";
 import { Dictionary } from "./dictionary";
-import { BiConsumer, BiFunctional, BiPredicate, Comparator, Executor, Functional, MultiFunctional } from "./functional";
+import { BiConsumer, BiFunctional, BiPredicate, Comparator, Executor, Functional, Supplier, TriFunctional, UnaryOperator } from "./functional";
 import { ArrayList, LinkedList, TreeList } from "./list";
 import { HashMap, TreeMap } from "./map";
 import { PriorityQueue } from "./queue";
 import { Throwable } from "./result";
 import { HashSet, TreeSet } from "./set";
+import { LinkedStack } from "./stack";
 
 
-export type Collector<T, C extends Structure> = Functional<Iterable<T>, C>;
+export type Collector<T, C> = Functional<Iterable<T>, C>;
 
 export class Collectors {
     public static Dictionary<T>(): (iterable: Iterable<[keyof any, T]>) => Dictionary<T> {
@@ -24,7 +24,7 @@ export class Collectors {
         return (iterable: Iterable<T>) => new LinkedList(iterable);
     }
 
-    public static SortedLinkedList<T>(compareFn: Comparator<T>): (iterable: Iterable<T>) => TreeList<T> {
+    public static TreeList<T>(compareFn: Comparator<T>): (iterable: Iterable<T>) => TreeList<T> {
         return (iterable: Iterable<T>) => new TreeList(compareFn, iterable);
     }
 
@@ -47,6 +47,10 @@ export class Collectors {
     public static TreeMap<K, V>(compareFn: Comparator<K>): (iterable: Iterable<[K, V]>) => TreeMap<K, V> {
         return (iterable: Iterable<[K, V]>) => new TreeMap(compareFn, iterable);
     }
+
+    public static LinkedStack<T>(): (iterable: Iterable<T>) => LinkedStack<T> {
+        return (iterable: Iterable<T>) => new LinkedStack(iterable);
+    }
 }
 
 interface GroupByAccessor<K, V> {
@@ -54,36 +58,28 @@ interface GroupByAccessor<K, V> {
 }
 
 export class Stream<T> implements Iterable<T>, AsyncIterable<T> {
-    #source: Iterable<T>;
+    #source: Supplier<Iterable<T>>;
     #locked = false;
 
-    constructor(iterable: Iterable<T>) {
-        this.#source = iterable;
+    constructor(supplier: Supplier<Iterable<T>>) {
+        this.#source = supplier;
     }
 
     #lock(): Iterable<T> {
         if (this.#locked)
             throw new Error("Pipeline locked");
         this.#locked = true;
-        return this.#source;
+        return this.#source();
     }
 
     public get locked(): boolean {
         return this.#locked;
     }
 
-    /*public concat<S>(...others: Iterable<S>[]): Stream<T | S> {
-        return new Stream((function* (self: Iterable<T>) {
-            yield* self;
-            for (const iterable of others)
-                yield* iterable;
-        })(this.#lock()));
-    }*/
-
     public take(count: number, offset: number = 0): Stream<T> {
         const source = this.#lock();
         return new Stream(
-            (function* () {
+            function* () {
                 let i = 0;
                 for (const val of source) {
                     if (i >= count + offset) break;
@@ -91,38 +87,52 @@ export class Stream<T> implements Iterable<T>, AsyncIterable<T> {
                         yield val;
                     i++;
                 }
-            })()
-        );
-    }
-
-    public takeWhile(predicate: BiPredicate<T, number>): Stream<T> {
-        const source = this.#lock();
-        return new Stream((function* () {
-            let i = 0;
-            for (const value of source) {
-                if (!predicate(value, i++)) break;
-                yield value;
             }
-        })());
+        );
     }
 
     public drop(offset: number): Stream<T> {
         const source = this.#lock();
         return new Stream(
-            (function* () {
+            function* () {
                 let i = 0;
                 for (const val of source) {
                     if (i >= offset)
                         yield val;
                     i++;
                 }
-            })()
+            }
         );
     }
 
-    public dropWhile(predicate: BiPredicate<T, number>): Stream<T> {
+    public limit(count: number): Stream<T> {
         const source = this.#lock();
-        return new Stream((function* () {
+        return new Stream(
+            function* () {
+                let i = 0;
+                for (const val of source) {
+                    if (i >= count) break;
+                    yield val;
+                    i++;
+                }
+            }
+        );
+    }
+
+    public while(predicate: BiPredicate<T, number>): Stream<T> {
+        const source = this.#lock();
+        return new Stream(function* () {
+            let i = 0;
+            for (const value of source) {
+                if (!predicate(value, i++)) break;
+                yield value;
+            }
+        });
+    }
+
+    public skip(predicate: BiPredicate<T, number>): Stream<T> {
+        const source = this.#lock();
+        return new Stream(function* () {
             let i = 0;
             let dropping = true;
             for (const value of source) {
@@ -130,66 +140,46 @@ export class Stream<T> implements Iterable<T>, AsyncIterable<T> {
                 dropping = false;
                 yield value;
             }
-        })());
+        });
     }
 
-    public limit(count: number): Stream<T> {
+    public until(predicate: BiPredicate<T, number>): Stream<T> {
         const source = this.#lock();
         return new Stream(
-            (function* () {
-                let i = 0;
-                for (const val of source) {
-                    if (i >= count) break;
-                    yield val;
-                    i++;
-                }
-            })()
-        );
-    }
-
-    public limitWhen(predicate: BiPredicate<T, number>): Stream<T> {
-        const source = this.#lock();
-        return new Stream(
-            (function* () {
+            function* () {
                 let i = 0;
                 for (const val of source) {
                     if (predicate(val, i++)) break;
                     yield val;
                 }
-            })()
+            }
         );
     }
-
-    //Functionals
 
     public map<U>(callbackfn: BiFunctional<T, number, U>): Stream<U> {
         const source = this.#lock();
         return new Stream(
-            (function* (): IterableIterator<U> {
+            function* (): IterableIterator<U> {
                 let i = 0;
                 for (const value of source)
                     yield callbackfn(value, i++);
-            })()
+            }
         );
     }
 
-    public filter<S extends T>(predicate: BiPredicate<T, number>): Stream<S> {
+    public cacheMap<U, R>(callbackfn: TriFunctional<U, T, number, R>, cache: U): Stream<R> {
+        let i = 0;
         const source = this.#lock();
-        return new Stream(
-            (function* () {
-                let i = 0;
-                for (const value of source) {
-                    if (predicate(value, i++)) {
-                        yield value as S;
-                    }
-                }
-            })()
-        );
+        return new Stream(function* () {
+            for (const value of source) {
+                yield callbackfn(cache, value, i++);
+            }
+        })
     }
 
     public flatMap<U>(callbackfn: BiFunctional<T, number, U | Stream<U>>): Stream<U> {
         const source = this.#lock();
-        return new Stream((function* () {
+        return new Stream(function* () {
             let i = 0
             for (const value of source) {
                 const mapped = callbackfn(value, i++);
@@ -199,45 +189,89 @@ export class Stream<T> implements Iterable<T>, AsyncIterable<T> {
                     yield mapped;
                 }
             }
-        })()
+        });
+    }
+
+    public filter<S extends T>(predicate: BiPredicate<T, number>): Stream<S> {
+        const source = this.#lock();
+        return new Stream(
+            function* () {
+                let i = 0;
+                for (const value of source) {
+                    if (predicate(value, i++)) {
+                        yield value as S;
+                    }
+                }
+            }
         );
     }
 
-    public peek(callbackfn: BiConsumer<T, number>, returnFn?: Executor): Stream<T> {
+    public peek(callbackfn: BiConsumer<T, number>): Stream<T> {
         const source = this.#lock();
-        return new Stream((function* () {
+        return new Stream(function* () {
             let i = 0;
             for (const value of source) {
                 callbackfn(value, i++);
                 yield value;
             }
-            returnFn?.();
-        })());
+        });
     }
 
-    //Collectors
+    public call(fn: Executor) {
+        const source = this.#lock();
+        return new Stream(function* () {
+            fn();
+            yield* source;
+        });
+    }
+
+    public return(fn: Executor) {
+        const source = this.#lock();
+        return new Stream(function* () {
+            yield* source;
+            fn();
+        });
+    }
+
+    public on(opts: {
+        call?: Executor,
+        peek?: BiConsumer<T, number>,
+        return?: Executor
+    }): Stream<T> {
+        const source = this.#lock();
+        return new Stream(function* () {
+            opts.call?.();
+            if (opts.peek) {
+                let i = 0;
+                for (const value of source) {
+                    opts.peek(value, i++);
+                    yield value;
+                }
+            } else {
+                yield* source;
+            }
+            opts.return?.();
+        });
+    }
 
     public forEach(callbackfn: BiConsumer<T, number>): void {
-        this.#lock();
         let i = 0;
-        for (const value of this.#source)
+        for (const value of this.#lock())
             callbackfn(value, i++);
     }
 
-    public reduce<U>(callbackfn: MultiFunctional<[U, T, number], U>, initialValue: U): U {
-        this.#lock();
+    public reduce<U>(callbackfn: TriFunctional<U, T, number, U>, initialValue: U): U {
         let i = 0;
         let accumulator = initialValue;
-        for (const value of this.#source) {
+        for (const value of this.#lock()) {
             accumulator = callbackfn(accumulator, value, i++);
         }
         return accumulator;
     }
 
     public find<S extends T>(predicate: BiPredicate<T, number>): S | undefined {
-        this.#lock();
         let i = 0;
-        for (const value of this.#source) {
+        for (const value of this.#lock()) {
             if (predicate(value, i++)) {
                 return value as S;
             }
@@ -246,19 +280,17 @@ export class Stream<T> implements Iterable<T>, AsyncIterable<T> {
     }
 
     public findLast<S extends T>(predicate: BiPredicate<T, number>): S | undefined {
-        this.#lock();
         let i = 0;
         let target: S | undefined = undefined;
-        for (const value of this.#source)
+        for (const value of this.#lock())
             if (predicate(value, i++))
                 target = value as S;
         return target;
     }
 
     public some(predicate: BiPredicate<T, number>): boolean {
-        this.#lock();
         let i = 0;
-        for (const value of this.#source) {
+        for (const value of this.#lock()) {
             if (predicate(value, i++)) {
                 return true;
             }
@@ -267,9 +299,8 @@ export class Stream<T> implements Iterable<T>, AsyncIterable<T> {
     }
 
     public every(predicate: BiPredicate<T, number>): boolean {
-        this.#lock();
         let i = 0;
-        for (const value of this.#source) {
+        for (const value of this.#lock()) {
             if (!predicate(value, i++)) {
                 return false;
             }
@@ -279,37 +310,40 @@ export class Stream<T> implements Iterable<T>, AsyncIterable<T> {
 
     public sort(compareFn: Comparator<T>): Stream<T> {
         const source = this.#lock();
-        return new Stream((function* () {
+        return new Stream(function* () {
             yield* new TreeList(compareFn, source);
-        })())
+        })
     }
 
     public reverse(): Stream<T> {
         const source = this.#lock();
-        return new Stream((function* () {
+        return new Stream(function* () {
             yield* new LinkedList(source).reverse();
-        })())
+        })
     }
 
     public distinct(): Stream<T> {
         const source = this.#lock();
-        return new Stream((function* () {
-            yield* new HashSet(source)
-        })());
+        const set = new HashSet(source);
+        return new Stream(function* () {
+            for (const value of source) {
+                if (set.has(value)) continue;
+                set.add(value);
+                yield value;
+            }
+        });
     }
 
     public count(): number {
-        this.#lock();
         let count = 0;
-        for (const _ of this.#source)
+        for (const _ of this.#lock())
             count++;
         return count;
     }
 
     public min(compareFn: Comparator<T>): T | undefined {
-        this.#lock();
         let min: T | undefined = undefined;
-        for (const value of this.#source) {
+        for (const value of this.#lock()) {
             min ??= value;
             if (compareFn(value, min) < 0) min = value;
         }
@@ -317,9 +351,8 @@ export class Stream<T> implements Iterable<T>, AsyncIterable<T> {
     }
 
     public max(compareFn: Comparator<T>): T | undefined {
-        this.#lock();
         let max: T | undefined = undefined;
-        for (const value of this.#source) {
+        for (const value of this.#lock()) {
             max ??= value;
             if (compareFn(max, value) < 0) max = value;
         }
@@ -329,10 +362,10 @@ export class Stream<T> implements Iterable<T>, AsyncIterable<T> {
     public buffer(size?: number): Stream<T[]> {
         const source = this.#lock();
         if (!size) {
-            return new Stream([Array.from(source)])
+            return new Stream(() => [Array.from(source)])
         }
         return new Stream(
-            (function* () {
+            function* () {
                 let cache = new Array<T>(size);
                 let i = 0;
                 for (const value of source) {
@@ -344,15 +377,14 @@ export class Stream<T> implements Iterable<T>, AsyncIterable<T> {
                     }
                 }
                 if (i > 0) yield cache.slice(0, i);
-            })()
+            }
         );
     }
 
     public groupby<K>(keyFn: BiFunctional<T, number, K>): GroupByAccessor<K, T> {
-        this.#lock();
         const cache = new HashMap<K, LinkedList<T>>();
         let i = 0;
-        for (const value of this.#source) {
+        for (const value of this.#lock()) {
             const key = keyFn(value, i++);
             if (!cache.has(key))
                 cache.set(key, new LinkedList());
@@ -362,8 +394,11 @@ export class Stream<T> implements Iterable<T>, AsyncIterable<T> {
     }
 
     public *sink(): IterableIterator<T> {
-        this.#lock();
-        yield* this.#source;
+        yield* this.#lock();
+    }
+
+    public drain(): void {
+        for (const _ of this.#lock());
     }
 
     public toStream(): ReadableStream<T> {
@@ -377,9 +412,8 @@ export class Stream<T> implements Iterable<T>, AsyncIterable<T> {
         })
     }
 
-    public collect<C extends Structure>(collector: Collector<T, C>): C {
-        this.#lock();
-        return collector(this.#source);
+    public collect<C>(collector: Collector<T, C>): C {
+        return collector(this.#lock());
     }
 
     public toArray() {
@@ -396,29 +430,55 @@ export class Stream<T> implements Iterable<T>, AsyncIterable<T> {
 
     get [Symbol.toStringTag](): string { return "SyncStream"; }
 
-    public static join<S extends any[]>(...iterables: Iterable<S[keyof S]>[]): Stream<S> {
+    public static join<S>(...iterables: Iterable<S>[]): Stream<S[]> {
         const iterators = iterables.map(val => val[Symbol.iterator]()) as Iterator<S>[];
 
         return new Stream(
-            (function* () {
+            function* () {
                 while (true) {
                     var res = iterators.map(val => val.next());
                     if (res.some(val => val.done)) break;
-                    yield res.map(val => val.value) as S;
+                    yield res.map(val => val.value) as S[];
                 };
-            })()
+            }
         );
     }
 
+    public static generate<S>(supplier: Supplier<S>): Stream<S> {
+        return new Stream(function* () {
+            while (true) {
+                yield supplier();
+            }
+        });
+    }
+
+    public static iterate<S>(startValue: S, fn: UnaryOperator<S>): Stream<S> {
+        return new Stream(function* () {
+            let currentValue = startValue;
+            yield currentValue;
+            while (true) {
+                currentValue = fn(currentValue);
+                yield currentValue;
+            }
+        });
+    }
+
+    public static concat<S>(...iterables: Iterable<S>[]): Stream<S> {
+        return new Stream(function* () {
+            for (const iterable of iterables)
+                yield* iterable;
+        });
+    }
+
     public static of<S>(...items: S[]): Stream<S> {
-        return new Stream(items);
+        return new Stream(() => items);
     }
 
     public static from<S>(iterable: Iterable<S>): Stream<S> {
-        return new Stream(iterable);
+        return new Stream(() => iterable);
     }
 
     public static fromObject<S>(obj: Record<string | number, S>): Stream<[string, S]> {
-        return new Stream(Object.entries(obj));
+        return new Stream(() => Object.entries(obj));
     }
 }

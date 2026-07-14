@@ -1,4 +1,4 @@
-import { Queue } from "./collections";
+import { Queue, EmptyStructureError } from "./collections";
 import { Comparator, TriConsumer } from "./functional";
 import { ArrayList } from "./list";
 import { Throwable } from "./result";
@@ -22,7 +22,7 @@ export class PriorityQueue<T> implements Queue<T> {
         return this.#array.size;
     }
 
-    public first(): Throwable<T> {
+    public first(): Throwable<T, EmptyStructureError> {
         return this.#array.first();
     }
 
@@ -55,7 +55,7 @@ export class PriorityQueue<T> implements Queue<T> {
         return size - this.#array.size;
     }
 
-    public remove(): Throwable<T> {
+    public remove(): Throwable<T, EmptyStructureError> {
         if (this.size === 0)
             throw new Error("PriorityQueue is empty");
         if (this.size === 1)
@@ -124,7 +124,7 @@ export class PriorityQueue<T> implements Queue<T> {
     }
 
     public stream(): Stream<T> {
-        return new Stream(this);
+        return Stream.from(this);
     }
 
     *[Symbol.iterator](): IterableIterator<T> {

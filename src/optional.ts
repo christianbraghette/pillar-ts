@@ -1,7 +1,7 @@
 import { Predicate, Supplier, Functional } from "./functional";
 import { Throwable } from "./result";
 
-class EmptyOptional extends Error {
+class EmptyOptionalError extends Error {
     constructor() {
         super(`EmptyOptional`);
         this.name = "EmptyOptional";
@@ -17,9 +17,9 @@ export class Optional<T> {
         this.#value = value;
     }
 
-    public get(): Throwable<T, EmptyOptional> {
+    public get(): Throwable<T, EmptyOptionalError> {
         if (!this.#present)
-            throw new EmptyOptional();
+            throw new EmptyOptionalError();
         return this.#value!;
     }
 

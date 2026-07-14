@@ -1,4 +1,4 @@
-import { Deque, List, Queue, SortedList, SortedQueue } from "./collections";
+import { Deque, KeyNotFoundError, List, SortedList, SortedQueue, EmptyStructureError } from "./collections";
 import { Comparator, TriConsumer } from "./functional";
 import { Throwable } from "./result";
 import { Stream } from "./stream";
@@ -21,15 +21,15 @@ export class ArrayList<T> extends List<T> implements Deque<T> {
         return this.#data.push(...items) - length;
     }
 
-    public removeLast(): Throwable<T> {
+    public removeLast(): Throwable<T, EmptyStructureError> {
         if (this.#data.length > 0)
-            throw new Error();
+            throw new EmptyStructureError(ArrayList.name);
         return this.#data.pop()!;
     }
 
-    public remove(): Throwable<T> {
+    public remove(): Throwable<T, EmptyStructureError> {
         if (this.#data.length > 0)
-            throw new Error();
+            throw new EmptyStructureError(ArrayList.name);
         return this.#data.shift()!;
     }
 
@@ -41,15 +41,15 @@ export class ArrayList<T> extends List<T> implements Deque<T> {
         this.#data.length = 0;
     }
 
-    public first(): Throwable<T> {
+    public first(): Throwable<T, EmptyStructureError> {
         if (this.#data.length > 0)
-            throw new Error();
+            throw new EmptyStructureError(ArrayList.name);
         return this.#data[0]!;
     }
 
-    public last(): Throwable<T> {
+    public last(): Throwable<T, EmptyStructureError> {
         if (this.#data.length > 0)
-            throw new Error();
+            throw new EmptyStructureError(ArrayList.name);
         return this.#data[this.#data.length]!;
     }
 
@@ -68,10 +68,10 @@ export class ArrayList<T> extends List<T> implements Deque<T> {
         return length - this.#data.length;
     }
 
-    public get(index: number): Throwable<T> {
+    public get(index: number): Throwable<T, KeyNotFoundError> {
         if (index < this.#data.length || index > -this.#data.length)
             return this.#data[index < 0 ? index + this.#data.length : index]!;
-        throw new Error();
+        throw new KeyNotFoundError(index, ArrayList.name);
     }
 
     public indexOf(searchElement: T, fromIndex: number = 0): number {
@@ -107,7 +107,7 @@ export class ArrayList<T> extends List<T> implements Deque<T> {
         this.#data.forEach((v: T, i: number) => callbackfn(v, i, this));
     }
 
-    public toSortedList(comparator: Comparator<T>): TreeList<T> {
+    public toSorted(comparator: Comparator<T>): TreeList<T> {
         return new TreeList(comparator, this);
     }
 
@@ -116,7 +116,7 @@ export class ArrayList<T> extends List<T> implements Deque<T> {
     }
 
     public stream(): Stream<T> {
-        return new Stream(this);
+        return Stream.from(this);
     }
 
     [Symbol.iterator](): IterableIterator<T> {
@@ -206,20 +206,20 @@ export class LinkedList<T> extends List<T> implements Deque<T> {
     /**
      * Returns the first element of the list.
      */
-    public first(): Throwable<T> {
+    public first(): Throwable<T, EmptyStructureError> {
         const value = this.#getValue(this.#head);
         if (!value)
-            throw new Error();
+            throw new EmptyStructureError(LinkedList.name);
         return value;
     }
 
     /**
      * Returns the last element of the list.
      */
-    public last(): Throwable<T> {
+    public last(): Throwable<T, EmptyStructureError> {
         const value = this.#getValue(this.#tail);
         if (!value)
-            throw new Error();
+            throw new EmptyStructureError(LinkedList.name);
         return value;
     }
 
@@ -280,9 +280,9 @@ export class LinkedList<T> extends List<T> implements Deque<T> {
     /**
      * Removes and returns the last element of the list.
      */
-    public removeLast(): Throwable<T> {
+    public removeLast(): Throwable<T, EmptyStructureError> {
         const nodeToRemove = this.#tail;
-        if (!nodeToRemove) throw new Error();
+        if (!nodeToRemove) throw new EmptyStructureError(LinkedList.name);
 
         const value = this.#getValue(nodeToRemove)!;
         const newTail = this.#getPrev(nodeToRemove);
@@ -304,9 +304,9 @@ export class LinkedList<T> extends List<T> implements Deque<T> {
     /**
      * Removes and returns the first element of the list.
      */
-    public remove(): Throwable<T> {
+    public remove(): Throwable<T, EmptyStructureError> {
         const nodeToRemove = this.#head;
-        if (!nodeToRemove) throw new Error();
+        if (!nodeToRemove) throw new EmptyStructureError(LinkedList.name)
 
         const value = this.#getValue(nodeToRemove)!;
         const newHead = this.#getNext(nodeToRemove);
@@ -406,9 +406,9 @@ export class LinkedList<T> extends List<T> implements Deque<T> {
      * Returns the element at the specified index. Supports negative indexing.
      * @param index Zero-based index.
      */
-    public get(index: number): Throwable<T> {
+    public get(index: number): Throwable<T, KeyNotFoundError> {
         let target = index < 0 ? this.size + index : index;
-        if (target < 0 || target >= this.size) throw new Error();
+        if (target < 0 || target >= this.size) throw new KeyNotFoundError(index, LinkedList.name);
 
         const fromStart = target < this.size / 2;
         let curr = fromStart ? this.#head : this.#tail;
@@ -418,13 +418,13 @@ export class LinkedList<T> extends List<T> implements Deque<T> {
             if (count === target) {
                 const value = this.#getValue(curr);
                 if (!value)
-                    throw new Error();
+                    throw new KeyNotFoundError(index, LinkedList.name);
                 return value
             }
             curr = fromStart ? this.#getNext(curr) : this.#getPrev(curr);
             fromStart ? count++ : count--;
         }
-        throw new Error();
+        throw new KeyNotFoundError(index, LinkedList.name);
     }
 
     /**
@@ -577,7 +577,7 @@ export class LinkedList<T> extends List<T> implements Deque<T> {
         }
     }
 
-    public toSortedList(comparator: Comparator<T>): TreeList<T> {
+    public toSorted(comparator: Comparator<T>): TreeList<T> {
         return new TreeList(comparator, this);
     }
 
@@ -586,7 +586,7 @@ export class LinkedList<T> extends List<T> implements Deque<T> {
     }
 
     public stream(): Stream<T> {
-        return new Stream(this);
+        return Stream.from(this);
     }
 
     /**
@@ -1093,27 +1093,27 @@ export class TreeList<T> extends SortedList<T> implements SortedQueue<T> {
         x.color = "BLACK";
     }
 
-    public first(): Throwable<T> {
-        if (!this.#root) throw new Error("List is empty");
+    public first(): Throwable<T, EmptyStructureError> {
+        if (!this.#root) throw new EmptyStructureError(TreeList.name);
         let curr = this.#root;
         while (curr.left) curr = curr.left;
         return this.#data.get(curr)!;
     }
 
-    public last(): Throwable<T> {
-        if (!this.#root) throw new Error("List is empty");
+    public last(): Throwable<T, EmptyStructureError> {
+        if (!this.#root) throw new EmptyStructureError(TreeList.name);
         let curr = this.#root;
         while (curr.right) curr = curr.right;
         return this.#data.get(curr)!;
     }
 
-    public remove(): Throwable<T> {
+    public remove(): Throwable<T, EmptyStructureError> {
         const val = this.first();
         this.delete(val);
         return val;
     }
 
-    public removeLast(): Throwable<T> {
+    public removeLast(): Throwable<T, EmptyStructureError> {
         const val = this.last();
         this.delete(val);
         return val;
@@ -1134,7 +1134,7 @@ export class TreeList<T> extends SortedList<T> implements SortedQueue<T> {
         return cmp < 0 ? this.#findNode(node.left, item) : this.#findNode(node.right, item);
     }
 
-    public get(index: number): Throwable<T> {
+    public get(index: number): Throwable<T, KeyNotFoundError> {
         let target = index < 0 ? this.size + index : index;
         if (target < 0 || target >= this.size) throw new Error("Index out of bounds");
 
@@ -1143,7 +1143,7 @@ export class TreeList<T> extends SortedList<T> implements SortedQueue<T> {
             if (currIdx === target) return val as Throwable<T>;
             currIdx++;
         }
-        throw new Error();
+        throw new KeyNotFoundError(index, TreeList.name);
     }
 
     public indexOf(searchElement: T, fromIndex: number = 0): number {
@@ -1240,9 +1240,9 @@ export class TreeList<T> extends SortedList<T> implements SortedQueue<T> {
         }
     }
 
-    public toList(): List<T> { return new LinkedList(this); }
+    public toUnsorted(): List<T> { return new LinkedList(this); }
     public toArray(): T[] { return Array.from(this); }
-    public stream(): Stream<T> { return new Stream(this); }
+    public stream(): Stream<T> { return Stream.from(this); }
 
     *[Symbol.iterator](): IterableIterator<T> {
         const self = this;

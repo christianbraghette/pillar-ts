@@ -34,6 +34,14 @@ export type Predicate<T> = Functional<T, unknown>;
 export type BiPredicate<T, S> = BiFunctional<T, S, unknown>;
 export type TriPredicate<T, S, U> = TriFunctional<T, S, U, unknown>;
 export namespace Predicate {
+    export function isTrue(): Predicate<boolean> {
+        return (value: boolean) => value === true;
+    }
+
+    export function isFalse(): Predicate<boolean> {
+        return (value: boolean) => value === true;
+    }
+
     export function isNullish<T>(): Predicate<T | null | undefined> {
         return (value: T | null | undefined) => value === null || value === undefined;
     }
@@ -235,7 +243,7 @@ export class Pipeline<T, R> {
     }
 
     public stream(iterable: Iterable<T>): Stream<R> {
-        return new Stream(iterable).map(this.pipe());
+        return Stream.from(iterable).map(this.pipe());
     }
 
     public map<S>(fn: Functional<R, S>): Pipeline<T, S> {

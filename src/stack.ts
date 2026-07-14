@@ -1,6 +1,6 @@
-import { Stack } from "./collections";
+import { Stack, EmptyStructureError } from "./collections";
 import { TriConsumer } from "./functional";
-import { Throwable } from "./result";
+import { Result, Throwable } from "./result";
 import { Stream } from "./stream";
 import { NativeSet } from "./native";
 
@@ -23,12 +23,20 @@ export class LinkedStack<T> implements Stack<T> {
         return this;
     }
 
-    public pop(): Throwable<T> {
+    public pop(): Throwable<T, EmptyStructureError> {
         return this.removeLast();
     }
 
     public get size(): number {
         return this.#size;
+    }
+
+    public last(): Throwable<T, EmptyStructureError> {
+        if (!this.#head) throw new EmptyStructureError(LinkedStack.name);
+        const value = this.#data.get(this.#head);
+        if (!value)
+            throw new EmptyStructureError(LinkedStack.name);
+        return value;
     }
 
     public add(...items: T[]): number {
@@ -85,8 +93,8 @@ export class LinkedStack<T> implements Stack<T> {
         return initialSize - this.#size;
     }
 
-    public removeLast(): Throwable<T> {
-        if (!this.#head) throw new Error();
+    public removeLast(): Throwable<T, EmptyStructureError> {
+        if (!this.#head) throw new EmptyStructureError(LinkedStack.name);
         const node = this.#head;
         this.#head = this.#head.next;
         this.#size--;
@@ -116,11 +124,23 @@ export class LinkedStack<T> implements Stack<T> {
     }
 
     public stream(): Stream<T> {
-        return new Stream(this);
+        return Stream.from(this);
     }
 
     public *[Symbol.iterator](): IterableIterator<T> {
+        const stack = new LinkedStack<StackNode>();
         for (let node = this.#head; !!node; node = node.next)
-            yield this.#data.get(node)!;
+            stack.add(node);
+        let node: StackNode;
+        while (Result.of(() => node = stack.removeLast()).ok())
+            yield this.#data.get(node!)!;
+    }
+
+    public static of<S>(...iterable: S[]): LinkedStack<S> {
+        return new LinkedStack(iterable);
+    }
+
+    public static from<S>(iterable: Iterable<S>): LinkedStack<S> {
+        return new LinkedStack(iterable);
     }
 }

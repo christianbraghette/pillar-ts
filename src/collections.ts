@@ -9,10 +9,10 @@ export class KeyNotFoundError extends Error {
     }
 }
 
-export class ValueNotFoundError<T> extends Error {
-    constructor(value: T, structure: string) {
-        super(`Value '${String(value)}' does not exist in '${structure}'.`);
-        this.name = "ValueNotFoundError";
+export class EmptyStructureError extends Error {
+    constructor(structure: string) {
+        super(`Structure '${structure}' is empty.`);
+        this.name = "EmptyStructureError";
     }
 }
 
@@ -32,44 +32,45 @@ export abstract class Collection<T> implements Iterable<T> {
 }
 
 export abstract class List<T> extends Collection<T> {
-    abstract get(index: number): Throwable<T, ValueNotFoundError<T>>;
+    abstract get(index: number): Throwable<T, KeyNotFoundError>;
     abstract set(index: number, item: T): boolean;
     abstract indexOf(item: T, fromIndex?: number): number;
     abstract lastIndexOf(item: T, fromIndex?: number): number;
     abstract slice(start?: number, end?: number): List<T>;
     abstract splice(start: number, deleteCount?: number, ...items: T[]): List<T>;
     abstract sort(comparator: Comparator<T>): this;
-    abstract toSortedList(comparator: Comparator<T>): SortedList<T>;
+    abstract toSorted(comparator: Comparator<T>): SortedList<T>;
 }
 
 export abstract class SortedList<T> extends Collection<T> {
-    abstract get(index: number): Throwable<T, ValueNotFoundError<T>>;
+    abstract get(index: number): Throwable<T, KeyNotFoundError>;
     abstract indexOf(item: T, fromIndex?: number): number;
     abstract lastIndexOf(item: T, fromIndex?: number): number;
-    abstract first(): Throwable<T>;
-    abstract last(): Throwable<T>;
+    abstract first(): Throwable<T, EmptyStructureError>;
+    abstract last(): Throwable<T, EmptyStructureError>;
     abstract comparator(): Comparator<T>;
     abstract head(item: T): SortedList<T>;
     abstract tail(item: T): SortedList<T>;
     abstract slice(start?: number, end?: number): SortedList<T>;
-    abstract toList(): List<T>;
+    abstract toUnsorted(): List<T>;
 }
 
 export interface Queue<T> extends Collection<T> {
-    first(): Throwable<T>;
-    remove(): Throwable<T>;
+    first(): Throwable<T, EmptyStructureError>;
+    remove(): Throwable<T, EmptyStructureError>;
 }
 
 export interface SortedQueue<T> extends Queue<T> {}
 
 export interface Deque<T> extends Queue<T> {
-    last(): Throwable<T>;
+    last(): Throwable<T, EmptyStructureError>;
     addFirst(...items: T[]): number;
-    removeLast(): Throwable<T>;
+    removeLast(): Throwable<T, EmptyStructureError>;
 }
 
 export interface Stack<T> extends Collection<T> {
-    removeLast(): Throwable<T>;
+    last(): Throwable<T, EmptyStructureError>;
+    removeLast(): Throwable<T, EmptyStructureError>;
 }
 
 export abstract class Set<T> extends Collection<T> {
@@ -80,8 +81,8 @@ export abstract class Set<T> extends Collection<T> {
 }
 
 export abstract class SortedSet<T> extends Set<T> {
-    abstract first(): Throwable<T>;
-    abstract last(): Throwable<T>;
+    abstract first(): Throwable<T, EmptyStructureError>;
+    abstract last(): Throwable<T, EmptyStructureError>;
     abstract comparator(): Comparator<T>;
     abstract head(item: T): SortedSet<T>;
     abstract tail(item: T): SortedSet<T>;

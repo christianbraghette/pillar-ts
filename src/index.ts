@@ -1,9 +1,3 @@
-import type { Collection } from "./collections";
-import { Dictionary } from "./dictionary";
-import type { Map } from "./map";
-
-export type Structure = Collection<any> | Map<any, any> | Dictionary<any>;
-
 //Utils
 export { Optional } from "./optional";
 export { Result } from "./result";

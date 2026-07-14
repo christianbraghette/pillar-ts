@@ -125,21 +125,21 @@ export class HashMap<K, V> extends Map<K, V> {
      * Returns a new Iterator object that contains the keys for each element in the map.
      */
     public keys(): Stream<K> {
-        return new Stream(this.#map.keys());
+        return Stream.from(this.#map.keys());
     }
 
     /**
      * Returns a new Iterator object that contains the values for each element in the map.
      */
     public values(): Stream<V> {
-        return new Stream(this.#map.values());
+        return Stream.from(this.#map.values());
     }
 
     /**
      * Returns a new Iterator object that contains the [key, value] pairs for each element in the map.
      */
     public entries(): Stream<[K, V]> {
-        return new Stream(this.#map.entries());
+        return Stream.from(this.#map.entries());
     }
 
     /**
@@ -572,21 +572,21 @@ export class TreeMap<K, V> implements SortedMap<K, V> {
      * Returns a new Iterator object that contains the keys for each element in the map in sorted order.
      */
     public keys(): Stream<K> {
-        return new Stream(this).map(([key]) => key);
+        return Stream.from(this).map(([key]) => key);
     }
 
     /**
      * Returns a new Iterator object that contains the values for each element in the map in sorted order of their keys.
      */
     public values(): Stream<V> {
-        return new Stream(this).map(([_, value]) => value);
+        return Stream.from(this).map(([_, value]) => value);
     }
 
     /**
      * Returns a new Iterator object that contains the [key, value] pairs for each element in the map in sorted order.
      */
     public entries(): Stream<[K, V]> {
-        return new Stream(this);
+        return Stream.from(this);
     }
 
     /**
