@@ -1,10 +1,9 @@
-import { Deque, KeyNotFoundError, List, SortedList, SortedQueue, EmptyStructureError } from "./collections";
+import { Deque, KeyNotFoundError, List, SortedList, SortedQueue, EmptyStructureError, Stack } from "./collections";
 import { Comparator, TriConsumer } from "./functional";
 import { Throwable } from "./result";
-import { Stream } from "./stream";
 import { NativeSet } from "./native";
 
-export class ArrayList<T> extends List<T> implements Deque<T> {
+export class ArrayList<T> extends List<T> {
     #data: T[];
 
     constructor(iterable?: Iterable<T>) {
@@ -111,14 +110,6 @@ export class ArrayList<T> extends List<T> implements Deque<T> {
         return new TreeList(comparator, this);
     }
 
-    public toArray(): T[] {
-        return Array.from(this);
-    }
-
-    public stream(): Stream<T> {
-        return Stream.from(this);
-    }
-
     [Symbol.iterator](): IterableIterator<T> {
         return this.#data.values();
     }
@@ -138,7 +129,7 @@ class LinkedListNode {
     constructor(public next?: LinkedListNode, public prev?: LinkedListNode) { }
 }
 
-export class LinkedList<T> extends List<T> implements Deque<T> {
+export class LinkedList<T> extends List<T> implements Deque<T>, Stack<T> {
     #data = new WeakMap<LinkedListNode, T>();
     #next?: LinkedListNode;
     #prev?: LinkedListNode;
@@ -579,14 +570,6 @@ export class LinkedList<T> extends List<T> implements Deque<T> {
 
     public toSorted(comparator: Comparator<T>): TreeList<T> {
         return new TreeList(comparator, this);
-    }
-
-    public toArray(): T[] {
-        return Array.from(this);
-    }
-
-    public stream(): Stream<T> {
-        return Stream.from(this);
     }
 
     /**
@@ -1240,9 +1223,7 @@ export class TreeList<T> extends SortedList<T> implements SortedQueue<T> {
         }
     }
 
-    public toUnsorted(): List<T> { return new LinkedList(this); }
-    public toArray(): T[] { return Array.from(this); }
-    public stream(): Stream<T> { return Stream.from(this); }
+    public toUnsorted(): LinkedList<T> { return new LinkedList(this); }
 
     *[Symbol.iterator](): IterableIterator<T> {
         const self = this;

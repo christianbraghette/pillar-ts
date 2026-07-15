@@ -1,14 +1,16 @@
 import { Queue, EmptyStructureError } from "./collections";
-import { Comparator, TriConsumer } from "./functional";
+import { Comparator, Supplier, TriConsumer } from "./functional";
 import { ArrayList } from "./list";
+import { IterableObject } from "./objects";
 import { Throwable } from "./result";
 import { Stream } from "./stream";
 
-export class PriorityQueue<T> implements Queue<T> {
+export class PriorityQueue<T> extends IterableObject<T> implements Queue<T> {
     #array = new ArrayList<T>();
     #compareFn: Comparator<T>;
 
     constructor(compareFn: Comparator<T>, iterable?: Iterable<T>) {
+        super();
         this.#compareFn = compareFn;
         for (const data of iterable ?? [])
             this.add(data);
@@ -121,6 +123,10 @@ export class PriorityQueue<T> implements Queue<T> {
 
     public toArray(): T[] {
         return Array.from(this);
+    }
+
+    public pipe(): Supplier<this> {
+        return () => this;
     }
 
     public stream(): Stream<T> {

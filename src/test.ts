@@ -1,4 +1,4 @@
-import { LinkedStack, Stack } from "./collections";
+import { LinkedList, LinkedStack, Stack } from "./collections";
 import { Stream } from "./stream";
 import { Pipeline, UnaryOperator } from "./utils";
 

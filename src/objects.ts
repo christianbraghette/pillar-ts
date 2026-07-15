@@ -2,6 +2,22 @@ import { Comparator } from "./functional";
 import { NativeNumber, NativeString } from "./native";
 import { Throwable } from "./result";
 
+export abstract class IterableObject<T, R = void> implements Iterable<T, R> {
+    public iterator() {
+        return this[Symbol.iterator]();
+    }
+
+    abstract [Symbol.iterator](): IterableIterator<T, R>;
+}
+
+export abstract class AsyncIterableObject<T, R = void> extends IterableObject<T, R> implements AsyncIterable<T, R> {
+    public asyncIterator() {
+        return this[Symbol.asyncIterator]();
+    }
+
+    abstract [Symbol.asyncIterator](): AsyncIterableIterator<T, R>;
+}
+
 class EmptyValue extends Error {
     constructor() {
         super("Value not present");

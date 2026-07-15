@@ -9,4 +9,3 @@ export type NativeNumber = Number;
 
 export const NativeString = String;
 export type NativeString = String;
-

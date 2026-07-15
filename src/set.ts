@@ -124,14 +124,6 @@ export class HashSet<T> extends Set<T> {
         return this.stream().every(value => other.has(value));
     }
 
-    toArray(): T[] {
-        return Array.from(this);
-    }
-
-    stream(): Stream<T> {
-        return Stream.from(this);
-    }
-
     [Symbol.iterator](): IterableIterator<T> {
         return this.#set.values();
     }
@@ -535,14 +527,6 @@ export class TreeSet<T> extends SortedSet<T> {
             if (!other.has(value)) return false;
         }
         return true;
-    }
-
-    public toArray(): T[] {
-        return Array.from(this);
-    }
-
-    public stream(): Stream<T> {
-        return Stream.from(this);
     }
 
     /**

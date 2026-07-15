@@ -1,4 +1,5 @@
-import { Comparator, TriConsumer } from "./functional";
+import { Comparator, Pipepable, Supplier, TriConsumer } from "./functional";
+import { IterableObject } from "./objects";
 import { Throwable } from "./result";
 import { Stream } from "./stream";
 
@@ -16,17 +17,26 @@ export class EmptyStructureError extends Error {
     }
 }
 
-export abstract class Collection<T> implements Iterable<T> {
+export abstract class Collection<T> extends IterableObject<T> implements Pipepable<Supplier<Collection<T>>> {
     abstract readonly size: number;
 
     abstract add(...items: T[]): number;
     abstract has(...items: T[]): boolean;
     abstract delete(...items: T[]): number;
     abstract forEach(consumer: TriConsumer<T, number, this>): void;
-    abstract toArray(): T[];
-
     abstract clear(): void;
-    abstract stream(): Stream<T>;
+
+    public toArray(): T[] {
+        return Array.from(this);
+    }
+
+    public pipe(): Supplier<this> {
+        return () => this;
+    }
+
+    public stream(): Stream<T> {
+        return new Stream(() => this);
+    };
 
     abstract [Symbol.iterator](): IterableIterator<T>;
 }

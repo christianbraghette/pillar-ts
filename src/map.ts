@@ -1,11 +1,12 @@
 import { KeyNotFoundError } from "./collections";
 import { Comparator, TriConsumer } from "./functional";
 import { LinkedList } from "./list";
-import { Result, Throwable } from "./result";
+import { Throwable } from "./result";
 import { Stream } from "./stream";
 import { NativeMap } from "./native";
+import { IterableObject } from "./objects";
 
-export abstract class Map<K, V> implements Iterable<[K, V]> {
+export abstract class Map<K, V> extends IterableObject<[K, V]> {
     abstract readonly size: number;
 
     abstract clear(): void;
@@ -196,7 +197,7 @@ class BSTNode {
     public color: Color = Color.RED;
 }
 
-export class TreeMap<K, V> implements SortedMap<K, V> {
+export class TreeMap<K, V> extends IterableObject<[K, V]> implements SortedMap<K, V> {
     #size: number = 0;
     #values = new WeakMap<BSTNode, V>();
     #keys = new WeakMap<BSTNode, K>();
@@ -210,6 +211,7 @@ export class TreeMap<K, V> implements SortedMap<K, V> {
      * @param iterable An optional iterable (e.g., an Array of [key, value] pairs) to initialize the map.
      */
     constructor(compareFn: Comparator<K>, iterable?: Iterable<[K, V]>) {
+        super();
         this.#compareFn = compareFn;
         for (const [key, value] of iterable ?? [])
             this.set(key, value);

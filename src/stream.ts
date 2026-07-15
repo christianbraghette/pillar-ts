@@ -3,6 +3,7 @@ import { Dictionary } from "./dictionary";
 import { BiConsumer, BiFunctional, BiPredicate, Comparator, Executor, Functional, Supplier, TriFunctional, UnaryOperator } from "./functional";
 import { ArrayList, LinkedList, TreeList } from "./list";
 import { HashMap, TreeMap } from "./map";
+import { AsyncIterableObject, IterableObject } from "./objects";
 import { PriorityQueue } from "./queue";
 import { Throwable } from "./result";
 import { HashSet, TreeSet } from "./set";
@@ -57,18 +58,28 @@ interface GroupByAccessor<K, V> {
     get(key: K): Throwable<Collection<V>, KeyNotFoundError>;
 }
 
-export class Stream<T> implements Iterable<T>, AsyncIterable<T> {
+class StreamLockedError extends Error {
+    constructor() {
+        super("Stream locked");
+    }
+}
+
+class StreamConstructor<T> extends AsyncIterableObject<T> implements AsyncIterable<T> {
     #source: Supplier<Iterable<T>>;
     #locked = false;
+    #reusable: boolean;
 
-    constructor(supplier: Supplier<Iterable<T>>) {
+    constructor(supplier: Supplier<Iterable<T>>, reusable: boolean) {
+        super()
         this.#source = supplier;
+        this.#reusable = !!reusable;
     }
 
     #lock(): Iterable<T> {
         if (this.#locked)
-            throw new Error("Pipeline locked");
-        this.#locked = true;
+            throw new StreamLockedError();
+        if (!this.#reusable)
+            this.#locked = true;
         return this.#source();
     }
 
@@ -217,22 +228,6 @@ export class Stream<T> implements Iterable<T>, AsyncIterable<T> {
         });
     }
 
-    public call(fn: Executor) {
-        const source = this.#lock();
-        return new Stream(function* () {
-            fn();
-            yield* source;
-        });
-    }
-
-    public return(fn: Executor) {
-        const source = this.#lock();
-        return new Stream(function* () {
-            yield* source;
-            fn();
-        });
-    }
-
     public on(opts: {
         call?: Executor,
         peek?: BiConsumer<T, number>,
@@ -315,22 +310,29 @@ export class Stream<T> implements Iterable<T>, AsyncIterable<T> {
         })
     }
 
-    public reverse(): Stream<T> {
+    public reverse(): BufferedStream<T> {
         const source = this.#lock();
-        return new Stream(function* () {
-            yield* new LinkedList(source).reverse();
-        })
+        let buffer: LinkedList<T> | undefined;
+        return new BufferedStream(() => {
+            if (!buffer)
+                buffer = new LinkedList(source).reverse();
+            return buffer;
+        });
     }
 
-    public distinct(): Stream<T> {
+    public distinct(): BufferedStream<T> {
         const source = this.#lock();
-        const set = new HashSet(source);
-        return new Stream(function* () {
-            for (const value of source) {
-                if (set.has(value)) continue;
-                set.add(value);
-                yield value;
-            }
+        const set = new HashSet<T>();
+        let loaded = false;
+        return new BufferedStream(function* () {
+            if (!loaded)
+                for (const value of source) {
+                    if (set.has(value)) continue;
+                    set.add(value);
+                    yield value;
+                }
+            else
+                yield *set;
         });
     }
 
@@ -359,26 +361,21 @@ export class Stream<T> implements Iterable<T>, AsyncIterable<T> {
         return max;
     }
 
-    public buffer(size?: number): Stream<T[]> {
+    public buffer(): BufferedStream<T> {
         const source = this.#lock();
-        if (!size) {
-            return new Stream(() => [Array.from(source)])
-        }
-        return new Stream(
-            function* () {
-                let cache = new Array<T>(size);
-                let i = 0;
+        const buffer = new LinkedList<T>();
+        let loaded = false;
+        return new BufferedStream(function* () {
+            if (!loaded) {
                 for (const value of source) {
-                    cache[i++] = value;
-                    if (i >= size) {
-                        yield cache;
-                        cache = new Array<T>(size);
-                        i = 0;
-                    }
+                    buffer.add(value);
+                    yield value;
                 }
-                if (i > 0) yield cache.slice(0, i);
+                loaded = true;
+                return;
             }
-        );
+            yield* buffer;
+        });
     }
 
     public groupby<K>(keyFn: BiFunctional<T, number, K>): GroupByAccessor<K, T> {
@@ -480,5 +477,21 @@ export class Stream<T> implements Iterable<T>, AsyncIterable<T> {
 
     public static fromObject<S>(obj: Record<string | number, S>): Stream<[string, S]> {
         return new Stream(() => Object.entries(obj));
+    }
+}
+
+export class Stream<T> extends StreamConstructor<T> {
+    constructor(supplier: Supplier<Iterable<T>>) {
+        super(supplier, false)
+    }
+}
+
+class BufferedStream<T> extends StreamConstructor<T> {
+    constructor(supplier: Supplier<Iterable<T>>) {
+        super(supplier, true);
+    }
+
+    public stream(): Stream<T> {
+        return new Stream(() => this.sink())
     }
 }

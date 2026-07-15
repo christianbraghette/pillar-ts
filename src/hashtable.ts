@@ -4,6 +4,7 @@ import { HashMap, Map } from "./map";
 import { Mutex, SemaphoreLock } from "./concurrence";
 import { Throwable } from "./result";
 import { Stream } from "./stream";
+import { IterableObject } from "./objects";
 
 export class HashTable<K, V> {
     #map: Mutex<HashMap<K, V>>;
@@ -140,10 +141,11 @@ export class HashTable<K, V> {
     }
 }
 
-class HashTableAccessor<K, V> implements Map<K, V> {
+class HashTableAccessor<K, V> extends IterableObject<[K, V]>implements Map<K, V> {
     #lock: SemaphoreLock<HashMap<K, V>>;
 
     constructor(lock: SemaphoreLock<HashMap<K, V>>) {
+        super();
         this.#lock = lock;
     }
 

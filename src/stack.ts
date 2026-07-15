@@ -1,19 +1,21 @@
 import { Stack, EmptyStructureError } from "./collections";
-import { TriConsumer } from "./functional";
+import { Supplier, TriConsumer } from "./functional";
 import { Result, Throwable } from "./result";
 import { Stream } from "./stream";
 import { NativeSet } from "./native";
+import { IterableObject } from "./objects";
 
 class StackNode {
     constructor(public next?: StackNode) { }
 }
 
-export class LinkedStack<T> implements Stack<T> {
+export class LinkedStack<T> extends IterableObject<T> implements Stack<T> {
     #data = new WeakMap<StackNode, T>();
     #head?: StackNode;
     #size = 0;
 
     constructor(iterable?: Iterable<T>) {
+        super();
         for (const item of iterable ?? [])
             this.add(item);
     }
@@ -121,6 +123,10 @@ export class LinkedStack<T> implements Stack<T> {
             node.next = undefined;
         }
         this.#size = 0;
+    }
+
+    public pipe(): Supplier<this> {
+        return () => this;
     }
 
     public stream(): Stream<T> {

@@ -216,7 +216,11 @@ export namespace Thrower {
     }
 }
 
-export class Pipeline<T, R> {
+export interface Pipepable<F extends Function> {
+    pipe(): F
+}
+
+export class Pipeline<T, R> implements Pipepable<Functional<T, R>> {
     #source?: T;
     #pipe: Functional<any, any>;
 
@@ -242,7 +246,11 @@ export class Pipeline<T, R> {
         return this.#pipe(value);
     }
 
-    public stream(iterable: Iterable<T>): Stream<R> {
+    public supply(supplier: Supplier<T>) {
+        this.consume(supplier());
+    }
+
+    public iterate(iterable: Iterable<T>): Stream<R> {
         return Stream.from(iterable).map(this.pipe());
     }
 
