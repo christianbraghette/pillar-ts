@@ -66,28 +66,26 @@ export class LinkedStack<T> extends IterableObject<T> implements Stack<T> {
         if (!this.#head || items.length === 0) return 0;
         const initialSize = this.#size;
 
-        for (const itemToDelete of items) {
-            let current: StackNode | undefined = this.#head;
-            let previous: StackNode | undefined = undefined;
+        let current: StackNode | undefined = this.#head;
+        let previous: StackNode | undefined = undefined;
 
-            while (current) {
-                const currentData = this.#data.get(current);
+        while (current) {
+            const currentData = this.#data.get(current);
 
-                if (currentData === itemToDelete) {
-                    if (previous) {
-                        previous.next = current.next;
-                    } else {
-                        this.#head = current.next;
-                    }
-
-                    this.#data.delete(current);
-                    this.#size--;
-                    break;
+            if (currentData && items.includes(currentData)) {
+                if (previous) {
+                    previous.next = current.next;
+                } else {
+                    this.#head = current.next;
                 }
 
-                previous = current;
-                current = current.next;
+                this.#data.delete(current);
+                this.#size--;
+                break;
             }
+
+            previous = current;
+            current = current.next;
         }
 
         return initialSize - this.#size;
