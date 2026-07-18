@@ -1,5 +1,11 @@
-import { KeyNotFoundError } from "./collections";
 import { Stream } from "./stream";
+
+class KeyNotFoundError extends Error {
+    constructor(key: string | number | symbol, structure: string) {
+        super(`Key '${String(key)}' does not exist in '${structure}'.`);
+        this.name = "KeyNotFoundError";
+    }
+}
 
 export class Dictionary<T> {
     [key: string | number]: T;

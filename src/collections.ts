@@ -1,23 +1,9 @@
-import { Comparator, Pipepable, Supplier, TriConsumer } from "./functional";
-import { IterableObject } from "./objects";
-import { Throwable } from "./result";
+import { Comparator, Supplier, TriConsumer, TriFunctional } from "./functional";
+import { FunctionalObject, IterableObject } from "./objects";
+import { Optional } from "./optional";
 import { Stream } from "./stream";
 
-export class KeyNotFoundError extends Error {
-    constructor(key: string | number | symbol, structure: string) {
-        super(`Key '${String(key)}' does not exist in '${structure}'.`);
-        this.name = "KeyNotFoundError";
-    }
-}
-
-export class EmptyStructureError extends Error {
-    constructor(structure: string) {
-        super(`Structure '${structure}' is empty.`);
-        this.name = "EmptyStructureError";
-    }
-}
-
-export abstract class Collection<T> extends IterableObject<T> implements Pipepable<Supplier<Collection<T>>> {
+export abstract class Collection<T> extends IterableObject<T> implements FunctionalObject {
     abstract readonly size: number;
 
     abstract add(...items: T[]): number;
@@ -26,6 +12,9 @@ export abstract class Collection<T> extends IterableObject<T> implements Pipepab
     abstract forEach(consumer: TriConsumer<T, number, this>): void;
     abstract clear(): void;
 
+    abstract map<S>(fn: TriFunctional<T, number, this, S>): Collection<S>;
+    abstract flatMap<S>(fn: TriFunctional<T, number, this, S | Collection<S>>): Collection<S>;
+    
     public toArray(): T[] {
         return Array.from(this);
     }
@@ -34,30 +23,28 @@ export abstract class Collection<T> extends IterableObject<T> implements Pipepab
         return () => this;
     }
 
-    public stream(): Stream<T> {
-        return new Stream(() => this);
-    };
+    abstract stream(): Stream<T>;
 
     abstract [Symbol.iterator](): IterableIterator<T>;
 }
 
 export abstract class List<T> extends Collection<T> {
-    abstract get(index: number): Throwable<T, KeyNotFoundError>;
+    abstract get(index: number): Optional<T>;
     abstract set(index: number, item: T): boolean;
     abstract indexOf(item: T, fromIndex?: number): number;
     abstract lastIndexOf(item: T, fromIndex?: number): number;
     abstract slice(start?: number, end?: number): List<T>;
-    abstract splice(start: number, deleteCount?: number, ...items: T[]): List<T>;
+    abstract splice(start: number, deleteCount: number, ...items: T[]): List<T>;
     abstract sort(comparator: Comparator<T>): this;
     abstract toSorted(comparator: Comparator<T>): SortedList<T>;
 }
 
 export abstract class SortedList<T> extends Collection<T> {
-    abstract get(index: number): Throwable<T, KeyNotFoundError>;
+    abstract get(index: number): Optional<T>;
     abstract indexOf(item: T, fromIndex?: number): number;
     abstract lastIndexOf(item: T, fromIndex?: number): number;
-    abstract first(): Throwable<T, EmptyStructureError>;
-    abstract last(): Throwable<T, EmptyStructureError>;
+    abstract first(): Optional<T>;
+    abstract last(): Optional<T>;
     abstract comparator(): Comparator<T>;
     abstract head(item: T): SortedList<T>;
     abstract tail(item: T): SortedList<T>;
@@ -66,33 +53,33 @@ export abstract class SortedList<T> extends Collection<T> {
 }
 
 export interface Queue<T> extends Collection<T> {
-    first(): Throwable<T, EmptyStructureError>;
-    remove(): Throwable<T, EmptyStructureError>;
+    first(): Optional<T>;
+    remove(): Optional<T>;
 }
 
 export interface SortedQueue<T> extends Queue<T> {}
 
 export interface Deque<T> extends Queue<T> {
-    last(): Throwable<T, EmptyStructureError>;
+    last(): Optional<T>;
     addFirst(...items: T[]): number;
-    removeLast(): Throwable<T, EmptyStructureError>;
+    removeLast(): Optional<T>;
 }
 
 export interface Stack<T> extends Collection<T> {
-    last(): Throwable<T, EmptyStructureError>;
-    removeLast(): Throwable<T, EmptyStructureError>;
+    last(): Optional<T>;
+    removeLast(): Optional<T>;
 }
 
 export abstract class Set<T> extends Collection<T> {
     abstract union(other: Set<T>): Set<T>;
     abstract intersection(other: Set<T>): Set<T>;
     abstract difference(other: Set<T>): Set<T>
-    abstract isSubsetOf(other: Set<T>): boolean
+    abstract isSubsetOf(other: Set<T>): boolean;
 }
 
 export abstract class SortedSet<T> extends Set<T> {
-    abstract first(): Throwable<T, EmptyStructureError>;
-    abstract last(): Throwable<T, EmptyStructureError>;
+    abstract first(): Optional<T>;
+    abstract last(): Optional<T>;
     abstract comparator(): Comparator<T>;
     abstract head(item: T): SortedSet<T>;
     abstract tail(item: T): SortedSet<T>;

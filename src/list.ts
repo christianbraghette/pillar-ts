@@ -1,7 +1,8 @@
-import { Deque, KeyNotFoundError, List, SortedList, SortedQueue, EmptyStructureError, Stack } from "./collections";
-import { Comparator, TriConsumer } from "./functional";
-import { Throwable } from "./result";
+import { Deque, List, SortedList, SortedQueue, Stack, Collection } from "./collections";
+import { Comparator, TriConsumer, TriFunctional } from "./functional";
 import { NativeSet } from "./native";
+import { Stream } from "./stream";
+import { Optional } from "./optional";
 
 export class ArrayList<T> extends List<T> {
     #data: T[];
@@ -20,16 +21,18 @@ export class ArrayList<T> extends List<T> {
         return this.#data.push(...items) - length;
     }
 
-    public removeLast(): Throwable<T, EmptyStructureError> {
+    public removeLast(): Optional<T> {
         if (this.#data.length > 0)
-            throw new EmptyStructureError(ArrayList.name);
-        return this.#data.pop()!;
+            return Optional.of(this.#data.pop()!);
+        return Optional.empty();
+
     }
 
-    public remove(): Throwable<T, EmptyStructureError> {
+    public remove(): Optional<T> {
         if (this.#data.length > 0)
-            throw new EmptyStructureError(ArrayList.name);
-        return this.#data.shift()!;
+            return Optional.of(this.#data.shift()!);
+        return Optional.empty();
+
     }
 
     public addFirst(...items: T[]): number {
@@ -40,16 +43,18 @@ export class ArrayList<T> extends List<T> {
         this.#data.length = 0;
     }
 
-    public first(): Throwable<T, EmptyStructureError> {
+    public first(): Optional<T> {
         if (this.#data.length > 0)
-            throw new EmptyStructureError(ArrayList.name);
-        return this.#data[0]!;
+            return Optional.of(this.#data[0]!);
+        return Optional.empty();
+
     }
 
-    public last(): Throwable<T, EmptyStructureError> {
+    public last(): Optional<T> {
         if (this.#data.length > 0)
-            throw new EmptyStructureError(ArrayList.name);
-        return this.#data[this.#data.length]!;
+            return Optional.of(this.#data[this.#data.length - 1]!);
+        return Optional.empty();
+
     }
 
     public has(...items: T[]): boolean {
@@ -67,10 +72,10 @@ export class ArrayList<T> extends List<T> {
         return length - this.#data.length;
     }
 
-    public get(index: number): Throwable<T, KeyNotFoundError> {
-        if (index < this.#data.length || index > -this.#data.length)
-            return this.#data[index < 0 ? index + this.#data.length : index]!;
-        throw new KeyNotFoundError(index, ArrayList.name);
+    public get(index: number): Optional<T> {
+        if (index < this.#data.length && index >= 0)
+            return Optional.of(this.#data[index]!);
+        return Optional.empty();
     }
 
     public indexOf(searchElement: T, fromIndex: number = 0): number {
@@ -85,8 +90,8 @@ export class ArrayList<T> extends List<T> {
         return new ArrayList<T>(this.#data.slice(start, end));
     }
 
-    public splice(start: number, deleteCount?: number, ...items: T[]): ArrayList<T> {
-        return new ArrayList<T>(this.#data.splice(start, deleteCount || 0, ...items));
+    public splice(start: number, deleteCount: number, ...items: T[]): ArrayList<T> {
+        return new ArrayList<T>(this.#data.splice(start, deleteCount, ...items));
     }
 
     public sort(comparator: Comparator<T>): this {
@@ -100,21 +105,48 @@ export class ArrayList<T> extends List<T> {
             return false;
         this.#data[target] = item;
         return true;
-    };
+    }
 
     public forEach(callbackfn: (value: T, key: number, obj: this) => void): void {
         this.#data.forEach((v: T, i: number) => callbackfn(v, i, this));
+    }
+
+    public map<S>(fn: TriFunctional<T, number, this, S>): ArrayList<S> {
+        const self = this;
+        return new ArrayList(function* () {
+            let i = 0;
+            for (const value of self)
+                yield fn(value, i++, self);
+        }())
+    }
+
+    public flatMap<S>(fn: TriFunctional<T, number, this, S | Collection<S>>): ArrayList<S> {
+        const self = this;
+        return new ArrayList(function* () {
+            let i = 0;
+            for (const value of self.iterator()) {
+                const result = fn(value, i++, self);
+                if (result instanceof Collection)
+                    yield* result.iterator();
+                else
+                    yield result;
+            }
+        }())
     }
 
     public toSorted(comparator: Comparator<T>): TreeList<T> {
         return new TreeList(comparator, this);
     }
 
+    public stream(): Stream<T> {
+        return new Stream(() => this);
+    }
+
     [Symbol.iterator](): IterableIterator<T> {
         return this.#data.values();
     }
 
-    get [Symbol.toStringTag](): string { return "ArrayList" };
+    get [Symbol.toStringTag](): string { return "ArrayList"; };
 
     public static from<S>(iterable: Iterable<S>): ArrayList<S> {
         return new ArrayList(iterable);
@@ -168,12 +200,14 @@ export class LinkedList<T> extends List<T> implements Deque<T>, Stack<T> {
             this.#prev = node;
     }
 
-    #getValue(node?: LinkedListNode): T | undefined {
-        return node ? this.#data.get(node) : undefined;
+    #getValue(node: LinkedListNode): T {
+        if (!this.#data.has(node))
+            throw new Error("Data leaking");
+        return this.#data.get(node)!;
     }
 
-    #getNext(node?: LinkedListNode): LinkedListNode | undefined {
-        return this.#reversed ? node?.prev : node?.next;
+    #getNext(node: LinkedListNode): LinkedListNode | undefined {
+        return this.#reversed ? node.prev : node.next;
     }
 
     #setNext(curr: LinkedListNode, next: LinkedListNode | undefined): void {
@@ -183,8 +217,8 @@ export class LinkedList<T> extends List<T> implements Deque<T>, Stack<T> {
             curr.next = next;
     }
 
-    #getPrev(node?: LinkedListNode): LinkedListNode | undefined {
-        return this.#reversed ? node?.next : node?.prev;
+    #getPrev(node: LinkedListNode): LinkedListNode | undefined {
+        return this.#reversed ? node.next : node.prev;
     }
 
     #setPrev(curr: LinkedListNode, prev: LinkedListNode | undefined): void {
@@ -197,21 +231,19 @@ export class LinkedList<T> extends List<T> implements Deque<T>, Stack<T> {
     /**
      * Returns the first element of the list.
      */
-    public first(): Throwable<T, EmptyStructureError> {
-        const value = this.#getValue(this.#head);
-        if (!value)
-            throw new EmptyStructureError(LinkedList.name);
-        return value;
+    public first(): Optional<T> {
+        if (!this.#head)
+            return Optional.empty();
+        return Optional.of(this.#getValue(this.#head));
     }
 
     /**
      * Returns the last element of the list.
      */
-    public last(): Throwable<T, EmptyStructureError> {
-        const value = this.#getValue(this.#tail);
-        if (!value)
-            throw new EmptyStructureError(LinkedList.name);
-        return value;
+    public last(): Optional<T> {
+        if (!this.#tail)
+            return Optional.empty();
+        return Optional.of(this.#getValue(this.#tail));
     }
 
     public clear(): void {
@@ -271,11 +303,11 @@ export class LinkedList<T> extends List<T> implements Deque<T>, Stack<T> {
     /**
      * Removes and returns the last element of the list.
      */
-    public removeLast(): Throwable<T, EmptyStructureError> {
+    public removeLast(): Optional<T> {
         const nodeToRemove = this.#tail;
-        if (!nodeToRemove) throw new EmptyStructureError(LinkedList.name);
+        if (!nodeToRemove) return Optional.empty();
 
-        const value = this.#getValue(nodeToRemove)!;
+        const value = this.#getValue(nodeToRemove);
         const newTail = this.#getPrev(nodeToRemove);
 
         this.#tail = newTail;
@@ -289,17 +321,18 @@ export class LinkedList<T> extends List<T> implements Deque<T>, Stack<T> {
 
         this.#data.delete(nodeToRemove);
         this.#size--;
-        return value;
+        return Optional.of(value);
     }
 
     /**
      * Removes and returns the first element of the list.
      */
-    public remove(): Throwable<T, EmptyStructureError> {
+    public remove(): Optional<T> {
         const nodeToRemove = this.#head;
-        if (!nodeToRemove) throw new EmptyStructureError(LinkedList.name)
+        if (!nodeToRemove)
+            return Optional.empty();
 
-        const value = this.#getValue(nodeToRemove)!;
+        const value = this.#getValue(nodeToRemove);
         const newHead = this.#getNext(nodeToRemove);
 
         this.#head = newHead;
@@ -315,7 +348,7 @@ export class LinkedList<T> extends List<T> implements Deque<T>, Stack<T> {
 
         this.#data.delete(nodeToRemove);
         this.#size--;
-        return value;
+        return Optional.of(value);
     }
 
     //### LINEAR METHODS
@@ -397,9 +430,9 @@ export class LinkedList<T> extends List<T> implements Deque<T>, Stack<T> {
      * Returns the element at the specified index. Supports negative indexing.
      * @param index Zero-based index.
      */
-    public get(index: number): Throwable<T, KeyNotFoundError> {
+    public get(index: number): Optional<T> {
         let target = index < 0 ? this.size + index : index;
-        if (target < 0 || target >= this.size) throw new KeyNotFoundError(index, LinkedList.name);
+        if (target < 0 || target >= this.size) return Optional.empty();
 
         const fromStart = target < this.size / 2;
         let curr = fromStart ? this.#head : this.#tail;
@@ -409,13 +442,13 @@ export class LinkedList<T> extends List<T> implements Deque<T>, Stack<T> {
             if (count === target) {
                 const value = this.#getValue(curr);
                 if (!value)
-                    throw new KeyNotFoundError(index, LinkedList.name);
-                return value
+                    return Optional.empty();
+                return Optional.of(value);
             }
             curr = fromStart ? this.#getNext(curr) : this.#getPrev(curr);
             fromStart ? count++ : count--;
         }
-        throw new KeyNotFoundError(index, LinkedList.name);
+        return Optional.empty();
     }
 
     /**
@@ -497,20 +530,21 @@ export class LinkedList<T> extends List<T> implements Deque<T>, Stack<T> {
      * @param items The elements to add to the list.
      * @returns A new LinkedList containing the deleted elements.
      */
-    public splice(start: number, deleteCount?: number, ...items: T[]): LinkedList<T> {
+    public splice(start: number, deleteCount: number, ...items: T[]): LinkedList<T> {
+        const removed = new LinkedList<T>();
+        if (!this.#head)
+            return removed;
+
         const s = start < 0 ? Math.max(this.size + start, 0) : Math.min(start, this.size);
-        const d = deleteCount === undefined ? this.size - s : Math.max(Math.min(deleteCount, this.size - s), 0);
+        const d = Math.max(Math.min(deleteCount, this.size - s), 0);
 
-        const removed: T[] = [];
-
-        let cursor = this.#head;
-        for (let i = 0; i < s; i++)
+        let cursor: LinkedListNode | undefined = this.#head;
+        for (let i = 0; cursor && i < s; i++)
             cursor = this.#getNext(cursor);
 
-        for (let i = 0; i < d; i++) {
-            if (!cursor) break;
-            const val = this.#getValue(cursor)!;
-            removed.push(val);
+        for (let i = 0; cursor && i < d; i++) {
+            const val = this.#getValue(cursor);
+            removed.add(val);
 
             const nextNode = this.#getNext(cursor);
             const prevNode = this.#getPrev(cursor);
@@ -600,13 +634,10 @@ export class LinkedList<T> extends List<T> implements Deque<T>, Stack<T> {
                     if (merged) this.#setPrev(merged, listTail);
                 }
 
+                if (!listTail)
+                    listTail = newHead;
                 while (listTail && this.#getNext(listTail))
                     listTail = this.#getNext(listTail);
-                if (!listTail) {
-                    listTail = newHead;
-                    while (listTail && this.#getNext(listTail))
-                        listTail = this.#getNext(listTail);
-                }
             }
 
             head = newHead;
@@ -696,11 +727,15 @@ export class LinkedList<T> extends List<T> implements Deque<T>, Stack<T> {
         let newTail = this.#head;
 
         if (newTailIndex < this.size / 2) {
-            for (let i = 0; i < newTailIndex; i++) newTail = this.#getNext(newTail);
+            for (let i = 0; newTail && i < newTailIndex; i++)
+                newTail = this.#getNext(newTail);
         } else {
             newTail = this.#tail;
-            for (let i = 0; i < (this.size - 1 - newTailIndex); i++) newTail = this.#getPrev(newTail);
+            for (let i = 0; newTail && i < (this.size - 1 - newTailIndex); i++)
+                newTail = this.#getPrev(newTail);
         }
+
+        if (!newTail) return this;
 
         const newHead = this.#getNext(newTail);
         const oldHead = this.#head;
@@ -770,6 +805,33 @@ export class LinkedList<T> extends List<T> implements Deque<T>, Stack<T> {
         return this;
     }
 
+    public map<S>(fn: TriFunctional<T, number, this, S>): LinkedList<S> {
+        const self = this;
+        return new LinkedList(function* () {
+            let i = 0;
+            for (const value of self)
+                yield fn(value, i++, self);
+        }())
+    }
+
+    public flatMap<S>(fn: TriFunctional<T, number, this, S | Collection<S>>): LinkedList<S> {
+        const self = this;
+        return new LinkedList(function* () {
+            let i = 0;
+            for (const value of self.iterator()) {
+                const result = fn(value, i++, self);
+                if (result instanceof Collection)
+                    yield* result.iterator();
+                else
+                    yield result;
+            }
+        }())
+    }
+
+    public stream(): Stream<T> {
+        return new Stream(() => this);
+    };
+
     /**
      * Default iterator for the list.
      */
@@ -814,7 +876,6 @@ export class TreeList<T> extends SortedList<T> implements SortedQueue<T> {
         }
     }
 
-    // --- Helper di Supporto RBT ---
     #getColor(node?: TreeNode): NodeColor {
         return node ? node.color : "BLACK"; // Le foglie/undefined sono nere
     }
@@ -862,9 +923,6 @@ export class TreeList<T> extends SortedList<T> implements SortedQueue<T> {
         this.#size = 0;
     }
 
-    /**
-     * Inserisce un elemento nell'albero e lo riabilancia modificando i colori e ruotando.
-     */
     public add(...items: T[]): number {
         const initialSize = this.#size;
         for (const item of items) {
@@ -1076,29 +1134,33 @@ export class TreeList<T> extends SortedList<T> implements SortedQueue<T> {
         x.color = "BLACK";
     }
 
-    public first(): Throwable<T, EmptyStructureError> {
-        if (!this.#root) throw new EmptyStructureError(TreeList.name);
+    public first(): Optional<T> {
+        if (!this.#root) return Optional.empty();
         let curr = this.#root;
         while (curr.left) curr = curr.left;
-        return this.#data.get(curr)!;
+        return Optional.of(this.#data.get(curr)!);
     }
 
-    public last(): Throwable<T, EmptyStructureError> {
-        if (!this.#root) throw new EmptyStructureError(TreeList.name);
+    public last(): Optional<T> {
+        if (!this.#root) return Optional.empty();
         let curr = this.#root;
         while (curr.right) curr = curr.right;
-        return this.#data.get(curr)!;
+        return Optional.of(this.#data.get(curr)!);
     }
 
-    public remove(): Throwable<T, EmptyStructureError> {
+    public remove(): Optional<T> {
         const val = this.first();
-        this.delete(val);
+        if (!val.isSome())
+            return Optional.empty();
+        this.delete(val.get());
         return val;
     }
 
-    public removeLast(): Throwable<T, EmptyStructureError> {
+    public removeLast(): Optional<T> {
         const val = this.last();
-        this.delete(val);
+        if (!val.isSome())
+            return Optional.empty();
+        this.delete(val.get());
         return val;
     }
 
@@ -1117,16 +1179,17 @@ export class TreeList<T> extends SortedList<T> implements SortedQueue<T> {
         return cmp < 0 ? this.#findNode(node.left, item) : this.#findNode(node.right, item);
     }
 
-    public get(index: number): Throwable<T, KeyNotFoundError> {
+    public get(index: number): Optional<T> {
         let target = index < 0 ? this.size + index : index;
-        if (target < 0 || target >= this.size) throw new Error("Index out of bounds");
+        if (target < 0 || target >= this.size) return Optional.empty();
 
         let currIdx = 0;
         for (const val of this) {
-            if (currIdx === target) return val as Throwable<T>;
+            if (currIdx === target)
+                return Optional.of(val);
             currIdx++;
         }
-        throw new KeyNotFoundError(index, TreeList.name);
+        return Optional.empty();
     }
 
     public indexOf(searchElement: T, fromIndex: number = 0): number {
@@ -1171,7 +1234,7 @@ export class TreeList<T> extends SortedList<T> implements SortedQueue<T> {
     public head(item: T): SortedList<T> {
         const subList = new TreeList<T>(this.#compareFn);
         for (const currentVal of this) {
-            if (this.#compareFn(currentVal, item) <= 0) {
+            if (this.#compareFn(currentVal, item) < 0) {
                 subList.add(currentVal);
             } else {
                 break;
@@ -1223,7 +1286,34 @@ export class TreeList<T> extends SortedList<T> implements SortedQueue<T> {
         }
     }
 
+    public map<S>(fn: TriFunctional<T, number, this, S>): List<S> {
+        const self = this;
+        return new LinkedList(function* () {
+            let i = 0;
+            for (const value of self)
+                yield fn(value, i++, self);
+        }())
+    }
+
+    public flatMap<S>(fn: TriFunctional<T, number, this, S | Collection<S>>): List<S> {
+        const self = this;
+        return new LinkedList(function* () {
+            let i = 0;
+            for (const value of self.iterator()) {
+                const result = fn(value, i++, self);
+                if (result instanceof Collection)
+                    yield* result.iterator();
+                else
+                    yield result;
+            }
+        }())
+    }
+
     public toUnsorted(): LinkedList<T> { return new LinkedList(this); }
+
+    public stream(): Stream<T> {
+        return new Stream(() => this);
+    };
 
     *[Symbol.iterator](): IterableIterator<T> {
         const self = this;

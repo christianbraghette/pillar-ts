@@ -1,8 +1,8 @@
-import { Queue, EmptyStructureError } from "./collections";
-import { Comparator, Supplier, TriConsumer } from "./functional";
-import { ArrayList } from "./list";
+import { Queue, Collection } from "./collections";
+import { Comparator, Supplier, TriConsumer, TriFunctional } from "./functional";
+import { ArrayList, LinkedList } from "./list";
 import { IterableObject } from "./objects";
-import { Throwable } from "./result";
+import { Optional } from "./optional";
 import { Stream } from "./stream";
 
 export class PriorityQueue<T> extends IterableObject<T> implements Queue<T> {
@@ -24,7 +24,7 @@ export class PriorityQueue<T> extends IterableObject<T> implements Queue<T> {
         return this.#array.size;
     }
 
-    public first(): Throwable<T, EmptyStructureError> {
+    public first(): Optional<T> {
         return this.#array.first();
     }
 
@@ -47,7 +47,7 @@ export class PriorityQueue<T> extends IterableObject<T> implements Queue<T> {
             const index = this.#array.indexOf(item);
             if (index === -1) continue;
 
-            const last = this.#array.removeLast()!;
+            const last = this.#array.removeLast().get();
             if (index < this.size) {
                 this.#array.set(index, last);
                 this.#bubbleDown(index);
@@ -57,14 +57,14 @@ export class PriorityQueue<T> extends IterableObject<T> implements Queue<T> {
         return size - this.#array.size;
     }
 
-    public remove(): Throwable<T, EmptyStructureError> {
+    public remove(): Optional<T> {
         if (this.size === 0)
-            throw new Error("PriorityQueue is empty");
+            return Optional.empty();
         if (this.size === 1)
             return this.#array.removeLast();
 
         const top = this.#array.first();
-        this.#array.set(0, this.#array.removeLast());
+        this.#array.set(0, this.#array.removeLast().get());
         this.#bubbleDown(0);
 
         return top;
@@ -73,7 +73,7 @@ export class PriorityQueue<T> extends IterableObject<T> implements Queue<T> {
     #bubbleUp(index: number): void {
         while (index > 0) {
             const parentIndex = Math.floor((index - 1) / 2);
-            if (this.#compareFn(this.#array.get(index), this.#array.get(parentIndex)) < 0) {
+            if (this.#compareFn(this.#array.get(index).get(), this.#array.get(parentIndex).get()) < 0) {
                 this.#swap(index, parentIndex);
                 index = parentIndex;
             } else {
@@ -88,10 +88,10 @@ export class PriorityQueue<T> extends IterableObject<T> implements Queue<T> {
             const left = 2 * index + 1;
             const right = 2 * index + 2;
 
-            if (left < this.size && this.#compareFn(this.#array.get(left), this.#array.get(smallest)) < 0) {
+            if (left < this.size && this.#compareFn(this.#array.get(left).get(), this.#array.get(smallest).get()) < 0) {
                 smallest = left;
             }
-            if (right < this.size && this.#compareFn(this.#array.get(right), this.#array.get(smallest)) < 0) {
+            if (right < this.size && this.#compareFn(this.#array.get(right).get(), this.#array.get(smallest).get()) < 0) {
                 smallest = right;
             }
 
@@ -106,8 +106,8 @@ export class PriorityQueue<T> extends IterableObject<T> implements Queue<T> {
 
     #swap(i: number, j: number): void {
         const aux = this.#array.get(i);
-        this.#array.set(i, this.#array.get(j));
-        this.#array.set(j, aux);
+        this.#array.set(i, this.#array.get(j).get());
+        this.#array.set(j, aux.get());
     }
 
     public clear(): void {
@@ -125,6 +125,29 @@ export class PriorityQueue<T> extends IterableObject<T> implements Queue<T> {
         return Array.from(this);
     }
 
+    public map<S>(fn: TriFunctional<T, number, this, S>): LinkedList<S> {
+        const self = this;
+        return new LinkedList(function* () {
+            let i = 0;
+            for (const value of self)
+                yield fn(value, i++, self);
+        }());
+    }
+
+    public flatMap<S>(fn: TriFunctional<T, number, this, S | Collection<S>>): LinkedList<S> {
+        const self = this;
+        return new LinkedList(function* () {
+            let i = 0;
+            for (const value of self.iterator()) {
+                const result = fn(value, i++, self);
+                if (result instanceof Collection)
+                    yield* result.iterator();
+                else
+                    yield result;
+            }
+        }());
+    }
+
     public pipe(): Supplier<this> {
         return () => this;
     }
@@ -139,7 +162,7 @@ export class PriorityQueue<T> extends IterableObject<T> implements Queue<T> {
         const indexHeap: number[] = [0];
 
         const compareIndices = (i: number, j: number) => {
-            return this.#compareFn(this.#array.get(indexHeap[i]), this.#array.get(indexHeap[j]));
+            return this.#compareFn(this.#array.get(indexHeap[i]).get(), this.#array.get(indexHeap[j]).get());
         };
 
         while (indexHeap.length > 0) {
@@ -147,7 +170,7 @@ export class PriorityQueue<T> extends IterableObject<T> implements Queue<T> {
             const currentIndex = indexHeap[0];
 
             // Fai lo yield del valore reale corrispondente
-            yield this.#array.get(currentIndex);
+            yield this.#array.get(currentIndex).get();
 
             // 2. Rimuoviamo la radice dall'indexHeap e riassestiamo (classico pop da heap)
             const lastIndex = indexHeap.pop()!;

@@ -1,7 +1,6 @@
 import { SortedQueue } from "./collections";
 import { Comparator, Functional, Supplier } from "./functional";
 import { TreeList } from "./list";
-import { Result } from "./result";
 
 export { Optional } from "./optional";
 export { Result } from "./result";
@@ -29,11 +28,11 @@ export class Indexer {
     }
 
     get(): Supplier<number> {
-        const index = Result.of(() => this.#free.remove()).orGet(() => {
+        const index = this.#free.remove().orGet(() => {
             if (this.#index < this.#maxIndex)
                 return ++this.#index;
             else
-                throw new IndexOutOfBound()
+                throw new IndexOutOfBound();
         });
         return () => index;
     }
@@ -52,14 +51,6 @@ export class Indexer {
 
     max(): number {
         return this.#index;
-    }
-
-    free(): number {
-        try {
-            return this.#free.first();
-        } catch {
-            return this.#index + 1;
-        }
     }
 }
 

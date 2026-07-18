@@ -1,4 +1,5 @@
-import { Predicate, Supplier, Functional } from "./functional";
+import { Predicate, Supplier, Functional, } from "./functional";
+import { FunctionalObject, IterableObject } from "./objects";
 import { Throwable } from "./result";
 
 class EmptyOptionalError extends Error {
@@ -8,11 +9,12 @@ class EmptyOptionalError extends Error {
     }
 }
 
-export class Optional<T> {
+export class Optional<T> extends IterableObject<T> implements FunctionalObject {
     #value?: T;
     #present: boolean;
 
     constructor(present: boolean, value?: T) {
+        super();
         this.#present = present;
         this.#value = value;
     }
@@ -23,17 +25,21 @@ export class Optional<T> {
         return this.#value!;
     }
 
-    public ok(): boolean {
+    public isSome(): boolean {
         return this.#present;
     }
 
-    public or(other: T): T {
+    public isNone(): boolean {
+        return !this.#present;
+    }
+
+    public or<S>(other: S): S | T {
         if (this.#present)
             return this.#value!;
         return other;
     }
 
-    public orGet(supplier: Supplier<T>): T {
+    public orGet<S>(supplier: Supplier<S>): S | T {
         if (this.#present)
             return this.#value!;
         return supplier();
@@ -58,11 +64,24 @@ export class Optional<T> {
         return Optional.empty();
     }
 
-    public flatMap<S>(fn: Functional<T, Optional<S>>): Optional<S> {
+    public flatMap<S>(fn: Functional<T, S | Optional<S>>): Optional<S> {
         if (this.#present) {
-            return fn(this.#value!);
+            const value = fn(this.#value!);
+            if (value instanceof Optional)
+                return value
+            else
+                return new Optional(true, value);
         }
         return Optional.empty();
+    }
+
+    public pipe(): Supplier<T> {
+        return () => this.orThrow(new Error("Optional is void"));
+    }
+
+    public *[Symbol.iterator](): IterableIterator<T> {
+        if (this.#present)
+            yield this.#value!;
     }
 
     public static empty(): Optional<never> {

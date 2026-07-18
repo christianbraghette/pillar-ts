@@ -1,12 +1,11 @@
-import { KeyNotFoundError } from "./collections";
-import { Comparator, TriConsumer } from "./functional";
-import { LinkedList } from "./list";
-import { Throwable } from "./result";
+import { Comparator, Supplier, TriConsumer, TriFunctional } from "./functional";
 import { Stream } from "./stream";
 import { NativeMap } from "./native";
-import { IterableObject } from "./objects";
+import { FunctionalObject, IterableObject } from "./objects";
+import { Optional } from "./optional";
+import { LinkedStack } from "./stack";
 
-export abstract class Map<K, V> extends IterableObject<[K, V]> {
+export abstract class Map<K, V> extends IterableObject<[K, V]> implements FunctionalObject {
     abstract readonly size: number;
 
     abstract clear(): void;
@@ -14,26 +13,31 @@ export abstract class Map<K, V> extends IterableObject<[K, V]> {
     abstract add(...entries: [K, V][]): number;
     abstract has(...keys: K[]): boolean;
     abstract delete(...keys: K[]): number;
-    abstract get(key: K): Throwable<V, KeyNotFoundError>;
+    abstract get(key: K): Optional<V>;
     abstract forEach(consumer: TriConsumer<V, K, this>): void;
 
     abstract keys(): Stream<K>
     abstract values(): Stream<V>;
     abstract entries(): Stream<[K, V]>
 
+    public pipe(): Supplier<this> {
+        return () => this;
+    }
+
+    abstract map<S>(fn: TriFunctional<V, K, this, S>): Map<K, S>;
+    abstract flatMap<S>(fn: TriFunctional<V, K, this, S | Map<K, S>>): Map<K, S>
+
     abstract [Symbol.iterator](): IterableIterator<[K, V]>;
 }
 
 export abstract class SortedMap<K, V> extends Map<K, V> {
-    abstract first(): Throwable<K>;
-    abstract last(): Throwable<K>;
+    abstract first(): Optional<K>;
+    abstract last(): Optional<K>;
     abstract comparator(): Comparator<K>;
     abstract head(key: K): SortedMap<K, V>;
     abstract tail(key: K): SortedMap<K, V>;
     abstract slice(fromKey: K, toKey: K): SortedMap<K, V>;
 }
-
-export { KeyNotFoundError };
 
 export class HashMap<K, V> extends Map<K, V> {
     #map: NativeMap<K, V>;
@@ -65,9 +69,10 @@ export class HashMap<K, V> extends Map<K, V> {
     }
 
     public add(...entries: [K, V][]): number {
+        const size = this.#map.size;
         for (const [key, value] of entries)
             this.#map.set(key, value);
-        return this.size;
+        return this.#map.size - size;
     }
 
     /**
@@ -75,10 +80,10 @@ export class HashMap<K, V> extends Map<K, V> {
      * @param key The key of the element to return.
      * @returns The element associated with the specified key, or undefined if not found.
      */
-    public get(key: K): Throwable<V, KeyNotFoundError> {
+    public get(key: K): Optional<V> {
         if (!this.#map.has(key))
-            throw new KeyNotFoundError(String(key), HashMap.name)
-        return this.#map.get(key)!;
+            return Optional.empty()
+        return Optional.of(this.#map.get(key)!);
     }
 
     /**
@@ -122,6 +127,27 @@ export class HashMap<K, V> extends Map<K, V> {
         }
     }
 
+    public map<S>(fn: TriFunctional<V, K, this, S>): HashMap<K, S> {
+        const self = this;
+        return new HashMap(function* () {
+            for (const [key, value] of self)
+                yield [key, fn(value, key, self)];
+        }())
+    }
+
+    public flatMap<S>(fn: TriFunctional<V, K, this, S | Map<K, S>>): HashMap<K, S> {
+        const self = this;
+        return new HashMap(function* () {
+            for (const [key, value] of self.iterator()) {
+                const result = fn(value, key, self);
+                if (result instanceof Map)
+                    yield* result.iterator();
+                else
+                    yield [key, result];
+            }
+        }())
+    }
+
     /**
      * Returns a new Iterator object that contains the keys for each element in the map.
      */
@@ -161,7 +187,7 @@ export class HashMap<K, V> extends Map<K, V> {
     }
 }
 
-export class LinkedHashMap<K, V> extends HashMap<K, V> {
+export class CacheMap<K, V> extends HashMap<K, V> {
     public override set(key: K, value: V): this {
         super.delete(key);
         super.set(key, value);
@@ -177,14 +203,35 @@ export class LinkedHashMap<K, V> extends HashMap<K, V> {
         return this.size - size;
     }
 
-    override get [Symbol.toStringTag](): string { return "LinkedHashMap"; }
-
-    public static override from<R, S>(iterable: Iterable<[R, S]>): LinkedHashMap<R, S> {
-        return new LinkedHashMap(iterable);
+    public map<S>(fn: TriFunctional<V, K, this, S>): CacheMap<K, S> {
+        const self = this;
+        return new CacheMap(function* () {
+            for (const [key, value] of self)
+                yield [key, fn(value, key, self)];
+        }())
     }
 
-    public static override of<R, S>(...items: [R, S][]): LinkedHashMap<R, S> {
-        return new LinkedHashMap(items);
+    public flatMap<S>(fn: TriFunctional<V, K, this, S | Map<K, S>>): CacheMap<K, S> {
+        const self = this;
+        return new CacheMap(function* () {
+            for (const [key, value] of self.iterator()) {
+                const result = fn(value, key, self);
+                if (result instanceof Map)
+                    yield* result.iterator();
+                else
+                    yield [key, result];
+            }
+        }())
+    }
+
+    override get [Symbol.toStringTag](): string { return "LinkedHashMap"; }
+
+    public static override from<R, S>(iterable: Iterable<[R, S]>): CacheMap<R, S> {
+        return new CacheMap(iterable);
+    }
+
+    public static override of<R, S>(...items: [R, S][]): CacheMap<R, S> {
+        return new CacheMap(items);
     }
 }
 
@@ -197,7 +244,7 @@ class BSTNode {
     public color: Color = Color.RED;
 }
 
-export class TreeMap<K, V> extends IterableObject<[K, V]> implements SortedMap<K, V> {
+export class TreeMap<K, V> extends SortedMap<K, V> {
     #size: number = 0;
     #values = new WeakMap<BSTNode, V>();
     #keys = new WeakMap<BSTNode, K>();
@@ -267,9 +314,10 @@ export class TreeMap<K, V> extends IterableObject<[K, V]> implements SortedMap<K
     }
 
     public add(...entries: [K, V][]): number {
+        const size = this.#size;
         for (const [key, value] of entries)
             this.set(key, value);
-        return this.size;
+        return this.#size - size;
     }
 
     /**
@@ -278,11 +326,11 @@ export class TreeMap<K, V> extends IterableObject<[K, V]> implements SortedMap<K
      * @param key The key whose associated value is to be returned.
      * @returns The value associated with the key, or undefined.
      */
-    public get(key: K): Throwable<V, KeyNotFoundError> {
+    public get(key: K): Optional<V> {
         const node = this.#findNode(key);
         if (node && this.#values.has(node))
-            return this.#values.get(node)!;
-        throw new KeyNotFoundError(String(key), TreeMap.name);
+            return Optional.of(this.#values.get(node)!);
+        return Optional.empty();
     }
 
     /**
@@ -507,22 +555,22 @@ export class TreeMap<K, V> extends IterableObject<[K, V]> implements SortedMap<K
         }
     }
 
-    public first(): Throwable<K> {
+    public first(): Optional<K> {
         if (!this.#root) {
-            throw new Error();
+            return Optional.empty();
         }
-        return this.#keys.get(this.#minimum(this.#root))!;
+        return Optional.of(this.#keys.get(this.#minimum(this.#root))!);
     }
 
-    public last(): Throwable<K> {
+    public last(): Optional<K> {
         if (!this.#root) {
-            throw new Error();
+            return Optional.empty();
         }
         let current = this.#root;
         while (current.right) {
             current = current.right;
         }
-        return this.#keys.get(current)!;
+        return Optional.of(this.#keys.get(current)!);
     }
 
     public comparator(): Comparator<K> {
@@ -570,6 +618,27 @@ export class TreeMap<K, V> extends IterableObject<[K, V]> implements SortedMap<K
         return subMap;
     }
 
+    public map<S>(fn: TriFunctional<V, K, this, S>): TreeMap<K, S> {
+        const self = this;
+        return new TreeMap(this.#compareFn, function* () {
+            for (const [key, value] of self)
+                yield [key, fn(value, key, self)];
+        }())
+    }
+
+    public flatMap<S>(fn: TriFunctional<V, K, this, S | Map<K, S>>): TreeMap<K, S> {
+        const self = this;
+        return new TreeMap(this.#compareFn, function* () {
+            for (const [key, value] of self.iterator()) {
+                const result = fn(value, key, self);
+                if (result instanceof Map)
+                    yield* result.iterator();
+                else
+                    yield [key, result];
+            }
+        }())
+    }
+
     /**
      * Returns a new Iterator object that contains the keys for each element in the map in sorted order.
      */
@@ -595,7 +664,7 @@ export class TreeMap<K, V> extends IterableObject<[K, V]> implements SortedMap<K
      * Default iterator for the TreeMap, yielding [key, value] pairs in sorted order.
      */
     *[Symbol.iterator](): IterableIterator<[K, V]> {
-        const stack = new LinkedList<BSTNode>();
+        const stack = new LinkedStack<BSTNode>();
         let current = this.#root;
 
         while (stack.size > 0 || current) {
@@ -604,7 +673,12 @@ export class TreeMap<K, V> extends IterableObject<[K, V]> implements SortedMap<K
                 current = current.left;
             }
 
-            current = stack.removeLast()!;
+            const last = stack.removeLast();
+
+            if (!last.isSome())
+                return;
+
+            current = last.get();
             yield [this.#keys.get(current)!, this.#values.get(current)!];
 
             current = current.right;

@@ -1,7 +1,7 @@
-import { Set, SortedSet, EmptyStructureError } from "./collections";
-import { Comparator } from "./functional";
+import { Set, SortedSet, Collection } from "./collections";
+import { Comparator, TriFunctional } from "./functional";
 import { LinkedList } from "./list";
-import { Throwable } from "./result";
+import { Optional } from "./optional";
 import { Stream } from "./stream";
 import { NativeSet } from "./native";
 
@@ -79,6 +79,29 @@ export class HashSet<T> extends Set<T> {
         }
     }
 
+    public map<S>(fn: TriFunctional<T, number, this, S>): HashSet<S> {
+        const self = this;
+        return new HashSet(function* () {
+            let i = 0;
+            for (const value of self)
+                yield fn(value, i++, self);
+        }());
+    }
+
+    public flatMap<S>(fn: TriFunctional<T, number, this, S | Collection<S>>): HashSet<S> {
+        const self = this;
+        return new HashSet(function* () {
+            let i = 0;
+            for (const value of self.iterator()) {
+                const result = fn(value, i++, self);
+                if (result instanceof Collection)
+                    yield* result.iterator();
+                else
+                    yield result;
+            }
+        }());
+    }
+
     /**
      * Combines the current set with another iterable to create a new set containing all unique elements from both.
      * @param other An iterable of elements to join with.
@@ -123,6 +146,10 @@ export class HashSet<T> extends Set<T> {
         if (this.size > other.size) return false;
         return this.stream().every(value => other.has(value));
     }
+
+    public stream(): Stream<T> {
+        return new Stream(() => this);
+    };
 
     [Symbol.iterator](): IterableIterator<T> {
         return this.#set.values();
@@ -179,12 +206,18 @@ export class TreeSet<T> extends SortedSet<T> {
             let y: TreeNode | undefined = undefined;
             let x = this.#root;
 
+            let duplicate = false;
             while (x) {
                 y = x;
                 const comparison = this.#compareFn(value, this.#data.get(x)!);
-                if (comparison === 0) continue;
+                if (comparison === 0) {
+                    duplicate = true;
+                    break;
+                }
                 x = comparison < 0 ? x.left : x.right;
             }
+            if (duplicate)
+                continue;
 
             const z = new TreeNode();
             this.#data.set(z, value);
@@ -219,7 +252,7 @@ export class TreeSet<T> extends SortedSet<T> {
                 const comparison = this.#compareFn(item, currentVal);
                 if (comparison === 0) {
                     i--;
-                    continue;
+                    break;
                 }
                 current = comparison < 0 ? current.left : current.right;
             }
@@ -435,23 +468,23 @@ export class TreeSet<T> extends SortedSet<T> {
         }
     }
 
-    public first(): Throwable<T, EmptyStructureError> {
+    public first(): Optional<T> {
         if (!this.#root) {
-            throw new EmptyStructureError(TreeSet.name);
+            return Optional.empty();
         }
         const minNode = this.#minimum(this.#root);
-        return this.#data.get(minNode)!;
+        return Optional.of(this.#data.get(minNode)!);
     }
 
-    public last(): Throwable<T, EmptyStructureError> {
+    public last(): Optional<T> {
         if (!this.#root) {
-            throw new EmptyStructureError(TreeSet.name);
+            return Optional.empty();
         }
         let node = this.#root;
         while (node.right) {
             node = node.right;
         }
-        return this.#data.get(node)!;
+        return Optional.of(this.#data.get(node)!);
     }
 
     public comparator(): Comparator<T> {
@@ -529,6 +562,33 @@ export class TreeSet<T> extends SortedSet<T> {
         return true;
     }
 
+    public map<S>(fn: TriFunctional<T, number, this, S>): Set<S> {
+        const self = this;
+        return new HashSet(function* () {
+            let i = 0;
+            for (const value of self)
+                yield fn(value, i++, self);
+        }());
+    }
+
+    public flatMap<S>(fn: TriFunctional<T, number, this, S | Collection<S>>): Set<S> {
+        const self = this;
+        return new HashSet(function* () {
+            let i = 0;
+            for (const value of self.iterator()) {
+                const result = fn(value, i++, self);
+                if (result instanceof Collection)
+                    yield* result.iterator();
+                else
+                    yield result;
+            }
+        }());
+    }
+
+    public stream(): Stream<T> {
+        return new Stream(() => this);
+    };
+
     /**
      * Default iterator that returns values in sorted order.
      */
@@ -540,7 +600,13 @@ export class TreeSet<T> extends SortedSet<T> {
                 stack.add(current);
                 current = current.left;
             }
-            current = stack.removeLast()!;
+
+            const last = stack.removeLast();
+
+            if (!last.isSome())
+                return;
+
+            current = last.get();
             yield this.#data.get(current)!;
             current = current.right;
         }

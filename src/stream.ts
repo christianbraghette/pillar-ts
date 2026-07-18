@@ -1,11 +1,11 @@
-import { Collection, KeyNotFoundError } from "./collections";
+import { Collection } from "./collections";
 import { Dictionary } from "./dictionary";
 import { BiConsumer, BiFunctional, BiPredicate, Comparator, Executor, Functional, Supplier, TriFunctional, UnaryOperator } from "./functional";
 import { ArrayList, LinkedList, TreeList } from "./list";
 import { HashMap, TreeMap } from "./map";
-import { AsyncIterableObject, IterableObject } from "./objects";
+import { AsyncIterableObject, FunctionalObject } from "./objects";
+import { Optional } from "./optional";
 import { PriorityQueue } from "./queue";
-import { Throwable } from "./result";
 import { HashSet, TreeSet } from "./set";
 import { LinkedStack } from "./stack";
 
@@ -55,7 +55,7 @@ export class Collectors {
 }
 
 interface GroupByAccessor<K, V> {
-    get(key: K): Throwable<Collection<V>, KeyNotFoundError>;
+    get(key: K): Optional<Collection<V>>;
 }
 
 class StreamLockedError extends Error {
@@ -64,7 +64,7 @@ class StreamLockedError extends Error {
     }
 }
 
-class StreamConstructor<T> extends AsyncIterableObject<T> implements AsyncIterable<T> {
+class StreamConstructor<T> extends AsyncIterableObject<T> implements FunctionalObject {
     #source: Supplier<Iterable<T>>;
     #locked = false;
     #reusable: boolean;
@@ -385,7 +385,7 @@ class StreamConstructor<T> extends AsyncIterableObject<T> implements AsyncIterab
             const key = keyFn(value, i++);
             if (!cache.has(key))
                 cache.set(key, new LinkedList());
-            cache.get(key)?.add(value);
+            cache.get(key).get().add(value);
         }
         return cache;
     }
@@ -398,7 +398,7 @@ class StreamConstructor<T> extends AsyncIterableObject<T> implements AsyncIterab
         for (const _ of this.#lock());
     }
 
-    public toStream(): ReadableStream<T> {
+    /*public toStream(): ReadableStream<T> {
         const source = this.#lock();
         return new ReadableStream({
             start(controller) {
@@ -407,7 +407,7 @@ class StreamConstructor<T> extends AsyncIterableObject<T> implements AsyncIterab
                 controller.close();
             },
         })
-    }
+    }*/
 
     public collect<C>(collector: Collector<T, C>): C {
         return collector(this.#lock());
@@ -415,6 +415,14 @@ class StreamConstructor<T> extends AsyncIterableObject<T> implements AsyncIterab
 
     public toArray() {
         return Array.from(this);
+    }
+
+    public toString(): string {
+        return this.toArray().toString();
+    }
+
+    public pipe(): Supplier<this> {
+        return () => this;
     }
 
     [Symbol.iterator](): IterableIterator<T> {

@@ -1,4 +1,4 @@
-import { Comparator } from "./functional";
+import { Comparator, Functional, GenericFunctional } from "./functional";
 import { NativeNumber, NativeString } from "./native";
 import { Throwable } from "./result";
 
@@ -16,6 +16,15 @@ export abstract class AsyncIterableObject<T, R = void> extends IterableObject<T,
     }
 
     abstract [Symbol.asyncIterator](): AsyncIterableIterator<T, R>;
+}
+
+export interface PipepableObject<F extends GenericFunctional<any, any>> {
+    pipe(): F
+}
+
+export interface FunctionalObject extends PipepableObject<GenericFunctional<any, any>>, IterableObject<any> {
+    map<S>(fn: Functional<any, S>): FunctionalObject;
+    flatMap<S>(fn: Functional<any, S | FunctionalObject>): FunctionalObject;
 }
 
 class EmptyValue extends Error {
@@ -61,7 +70,7 @@ export interface Nullable {
     isNA(): boolean;
 }
 
-export class Boolean implements Object, Comparable, Nullable {
+/*export class Boolean implements Object, Comparable, Nullable {
     #value?: boolean;
     #empty = false;
 
@@ -226,4 +235,4 @@ export class String extends NativeString implements Object, Comparable, Nullable
     public static of(value?: any) {
         return new String(value);
     }
-}
+}*/

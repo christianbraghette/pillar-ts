@@ -42,9 +42,9 @@ export class Semaphore<T> {
         return this.#queue.size;
     }
 
-    #resolver = () => {
+    readonly #resolver = () => {
         if (this.#count++ < 0)
-            this.#queue.remove().resolve(new LockConstructor(this.#supplier(), this.#resolver));
+            this.#queue.remove().get().resolve(new LockConstructor(this.#supplier(), this.#resolver));
     }
 
     public acquire(timeoutMs?: number): Promise<SemaphoreLock<T>> {
@@ -81,14 +81,14 @@ export class Semaphore<T> {
     }
 
     public releaseAll(): void {
-        while (this.#queue.size > 0)
-            this.#queue.remove()?.resolve(LockConstructor.released(this.#supplier()));
+        for(let node = this.#queue.remove(); node.isSome(); node = this.#queue.remove())
+            node.get().resolve(LockConstructor.released(this.#supplier()));
         this.#count = this.#maxCount;
     }
 
     public rejectAll(): void {
-        while (this.#queue.size > 0)
-            this.#queue.remove()?.reject('reset');
+        for(let node = this.#queue.remove(); node.isSome(); node = this.#queue.remove())
+            node.get().reject('reset');
         this.#count = this.#maxCount;
     }
 

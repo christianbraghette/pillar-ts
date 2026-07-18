@@ -1,9 +1,9 @@
-import { Stack, EmptyStructureError } from "./collections";
-import { Supplier, TriConsumer } from "./functional";
-import { Result, Throwable } from "./result";
+import { Stack, Collection } from "./collections";
+import { Supplier, TriConsumer, TriFunctional } from "./functional";
 import { Stream } from "./stream";
 import { NativeSet } from "./native";
 import { IterableObject } from "./objects";
+import { Optional } from "./optional";
 
 class StackNode {
     constructor(public next?: StackNode) { }
@@ -25,7 +25,7 @@ export class LinkedStack<T> extends IterableObject<T> implements Stack<T> {
         return this;
     }
 
-    public pop(): Throwable<T, EmptyStructureError> {
+    public pop(): Optional<T> {
         return this.removeLast();
     }
 
@@ -33,12 +33,10 @@ export class LinkedStack<T> extends IterableObject<T> implements Stack<T> {
         return this.#size;
     }
 
-    public last(): Throwable<T, EmptyStructureError> {
-        if (!this.#head) throw new EmptyStructureError(LinkedStack.name);
+    public last(): Optional<T> {
+        if (!this.#head) return Optional.empty();
         const value = this.#data.get(this.#head);
-        if (!value)
-            throw new EmptyStructureError(LinkedStack.name);
-        return value;
+        return new Optional(true, value);
     }
 
     public add(...items: T[]): number {
@@ -95,14 +93,14 @@ export class LinkedStack<T> extends IterableObject<T> implements Stack<T> {
         return initialSize - this.#size;
     }
 
-    public removeLast(): Throwable<T, EmptyStructureError> {
-        if (!this.#head) throw new EmptyStructureError(LinkedStack.name);
+    public removeLast(): Optional<T> {
+        if (!this.#head) return Optional.empty();
         const node = this.#head;
         this.#head = this.#head.next;
         this.#size--;
-        const value = this.#data.get(node)!;
+        const value = this.#data.get(node);
         this.#data.delete(node);
-        return value;
+        return Optional.of(value!);
     }
 
     public forEach(consumer: TriConsumer<T, number, this>): void {
@@ -125,6 +123,29 @@ export class LinkedStack<T> extends IterableObject<T> implements Stack<T> {
         this.#size = 0;
     }
 
+    public map<S>(fn: TriFunctional<T, number, this, S>): LinkedStack<S> {
+        const self = this;
+        return new LinkedStack(function* () {
+            let i = 0;
+            for (const value of self)
+                yield fn(value, i++, self);
+        }());
+    }
+
+    public flatMap<S>(fn: TriFunctional<T, number, this, S | Collection<S>>): LinkedStack<S> {
+        const self = this;
+        return new LinkedStack(function* () {
+            let i = 0;
+            for (const value of self.iterator()) {
+                const result = fn(value, i++, self);
+                if (result instanceof Collection)
+                    yield* result.iterator();
+                else
+                    yield result;
+            }
+        }());
+    }
+
     public pipe(): Supplier<this> {
         return () => this;
     }
@@ -137,9 +158,11 @@ export class LinkedStack<T> extends IterableObject<T> implements Stack<T> {
         const stack = new LinkedStack<StackNode>();
         for (let node = this.#head; !!node; node = node.next)
             stack.add(node);
-        let node: StackNode;
-        while (Result.of(() => node = stack.removeLast()).ok())
-            yield this.#data.get(node!)!;
+        ;
+        let node: Optional<StackNode>;
+        while ((node = stack.removeLast()).isSome())
+            yield this.#data.get(node.get())!;
+
     }
 
     public static of<S>(...iterable: S[]): LinkedStack<S> {

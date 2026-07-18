@@ -1,10 +1,11 @@
+import { FunctionalObject, IterableObject } from "./objects";
 import { Throwable } from "./result";
 import { Stream } from "./stream";
 
 export type Functional<T, R> = (args_0: T) => R;
 export type BiFunctional<T, S, R> = (args_0: T, args_1: S) => R;
 export type TriFunctional<T, S, U, R> = (args_0: T, args_1: S, args_2: U) => R;
-export type MultiFunctional<T extends any[], R> = (...args: T) => R;
+export type GenericFunctional<T extends any[], R> = (...args: T) => R;
 export namespace Functional {
     export function toString<T>(): Functional<T, string> {
         return (value: T) => String(value);
@@ -211,43 +212,52 @@ export type Constructor<T extends any[], C> = new (...args: T) => C;
 
 export type Thrower<E extends Error> = Supplier<Throwable<never, E>>;
 export namespace Thrower {
-    export function error<A extends any[], E extends Error>(ErrorClass: Constructor<A, E>, ...args: A): Supplier<Throwable<never, E>> {
-        return () => { throw new ErrorClass(...args); };
+    export function error<E extends Error>(error: E): Supplier<Throwable<never, E>> {
+        return () => { throw error; };
     }
 }
 
-export interface Pipepable<F extends Function> {
-    pipe(): F
+export interface Pipeline<T, R> {
+    (args_0: T): R;
 }
+export class Pipeline<T, R> extends IterableObject<Functional<T, R>> implements Functional<T, R>, FunctionalObject {
 
-export class Pipeline<T, R> implements Pipepable<Functional<T, R>> {
-    #source?: T;
-    #pipe: Functional<any, any>;
-
-    constructor(f1: Functional<T, R>);
-    constructor(f1: Functional<T, any>, f2: Functional<any, R>);
-    constructor(f1: Functional<T, any>, f2: Functional<any, any>, f3: Functional<any, R>);
-    constructor(f1: Functional<T, any>, f2: Functional<any, any>, f3: Functional<any, any>, f4: Functional<any, R>);
-    constructor(f1: Functional<T, any>, f2: Functional<any, any>, f3: Functional<any, any>, f4: Functional<any, any>, f5: Functional<any, R>);
-    constructor(f1: Functional<T, any>, f2: Functional<any, any>, f3: Functional<any, any>, f4: Functional<any, any>, f5: Functional<any, any>, f6: Functional<any, R>);
-    constructor(...funcs: Functional<any, any>[])
     constructor(...funcs: Functional<any, any>[]) {
-        this.#pipe = () => this.#source!;
+        super();
+        let source: Functional<any, any> | undefined = undefined;
         for (const functional of funcs)
-            this.#pipe = Functional.compose(this.#pipe, functional);
+            if (!source)
+                source = functional;
+            else
+                source = Functional.compose(source, functional);
+        if (!source)
+            throw new Error("Empty Pipeline");
+
+        Object.defineProperty(source, "name", { get: () => "Pipeline" });
+        const obj = Object.assign(source as Functional<T, R>, this);
+        Object.setPrototypeOf(obj, Pipeline.prototype);
+        Object.seal(obj);
+        return obj;
     }
 
-    public pipe(): Functional<T, R> {
-        return (value: T) => this.consume(value);
+    public pipe(): Pipeline<T, R> {
+        return this;
     }
 
-    public consume(value: T): R {
-        this.#source = value;
-        return this.#pipe(value);
+    public call(value: T): R {
+        return this(value);
     }
 
-    public supply(supplier: Supplier<T>) {
-        this.consume(supplier());
+    public bind(value: T): Supplier<R> {
+        return () => this(value);
+    }
+
+    public apply(supplier: Supplier<T>): R {
+        return this.call(supplier());
+    }
+
+    public supply(supplier: Supplier<T>): Supplier<R> {
+        return this.bind(supplier());
     }
 
     public iterate(iterable: Iterable<T>): Stream<R> {
@@ -255,30 +265,33 @@ export class Pipeline<T, R> implements Pipepable<Functional<T, R>> {
     }
 
     public map<S>(fn: Functional<R, S>): Pipeline<T, S> {
-        return new Pipeline(this.#pipe, fn);
+        return pipe((value: T) => this(value) as R, fn);
     }
 
     public flatMap<S>(fn: Functional<R, S | Pipeline<R, S>>): Pipeline<T, S> {
-        return new Pipeline(this.#pipe, (value: R) => {
-            const res = fn(value)
+        return pipe((value: T) => this(value), (value: R) => {
+            const res = fn(value);
             if (res instanceof Pipeline)
-                return res.consume(value);
-            else
-                return res;
+                return res.call(value);
+            return res;
         });
     }
 
-    public static of<A, O>(f1: Functional<A, O>): Pipeline<A, O>;
-    public static of<A, B, O>(f1: Functional<A, B>, f2: Functional<B, O>): Pipeline<A, O>;
-    public static of<A, B, C, O>(f1: Functional<A, B>, f2: Functional<B, C>, f3: Functional<C, O>): Pipeline<A, O>;
-    public static of<A, B, C, D, O>(f1: Functional<A, B>, f2: Functional<B, C>, f3: Functional<C, D>, f4: Functional<D, O>): Pipeline<A, O>;
-    public static of<A, B, C, D, E, O>(f1: Functional<A, B>, f2: Functional<B, C>, f3: Functional<C, D>, f4: Functional<D, E>, f5: Functional<E, O>): Pipeline<A, O>;
-    public static of<A, B, C, D, E, F, O>(f1: Functional<A, B>, f2: Functional<B, C>, f3: Functional<C, D>, f4: Functional<D, E>, f5: Functional<E, F>, f6: Functional<F, O>): Pipeline<A, O>;
-    public static of<S, O>(...funcs: Functional<any, any>[]) {
-        return new Pipeline<S, O>(...funcs);
+    public toString(): string {
+        return "[object Pipeline]";
     }
 
-    public static from<S, O>(funcs: Iterable<Functional<any, any>>) {
-        return new Pipeline<S, O>(...funcs);
+    public *[Symbol.iterator](): IterableIterator<Pipeline<T, R>> {
+        yield this;
     }
+}
+
+export function pipe<A, O>(f1: Functional<A, O>): Pipeline<A, O>;
+export function pipe<A, B, O>(f1: Functional<A, B>, f2: Functional<B, O>): Pipeline<A, O>;
+export function pipe<A, B, C, O>(f1: Functional<A, B>, f2: Functional<B, C>, f3: Functional<C, O>): Pipeline<A, O>;
+export function pipe<A, B, C, D, O>(f1: Functional<A, B>, f2: Functional<B, C>, f3: Functional<C, D>, f4: Functional<D, O>): Pipeline<A, O>;
+export function pipe<A, B, C, D, E, O>(f1: Functional<A, B>, f2: Functional<B, C>, f3: Functional<C, D>, f4: Functional<D, E>, f5: Functional<E, O>): Pipeline<A, O>;
+export function pipe<A, B, C, D, E, F, O>(f1: Functional<A, B>, f2: Functional<B, C>, f3: Functional<C, D>, f4: Functional<D, E>, f5: Functional<E, F>, f6: Functional<F, O>): Pipeline<A, O>;
+export function pipe<T, R>(...funcs: Functional<any, any>[]): Pipeline<T, R> {
+    return new Pipeline(...funcs);
 }

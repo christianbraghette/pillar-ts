@@ -1,10 +1,16 @@
-import { KeyNotFoundError } from "./collections";
-import { TriConsumer } from "./functional";
+import { Supplier, TriConsumer, TriFunctional } from "./functional";
 import { HashMap, Map } from "./map";
 import { Mutex, SemaphoreLock } from "./concurrence";
 import { Throwable } from "./result";
 import { Stream } from "./stream";
 import { IterableObject } from "./objects";
+import { Optional } from "./optional";
+
+class LockedHashTableError extends Error {
+    constructor() {
+        super("HashTable is locked");
+    }
+}
 
 export class HashTable<K, V> {
     #map: Mutex<HashMap<K, V>>;
@@ -33,7 +39,7 @@ export class HashTable<K, V> {
         }
     }
 
-    public async get(key: K): Promise<V> {
+    public async get(key: K): Promise<Optional<V>> {
         const lock = await this.#map.acquire();
         try {
             return lock.get().get(key);
@@ -121,6 +127,10 @@ export class HashTable<K, V> {
         }
     }
 
+    public pipe(): Supplier<this> {
+        return () => this;
+    }
+
     public async *[Symbol.asyncIterator](): AsyncIterableIterator<[K, V]> {
         const lock = await this.#map.acquire();
         try {
@@ -141,7 +151,7 @@ export class HashTable<K, V> {
     }
 }
 
-class HashTableAccessor<K, V> extends IterableObject<[K, V]>implements Map<K, V> {
+class HashTableAccessor<K, V> extends IterableObject<[K, V]> implements Map<K, V> {
     #lock: SemaphoreLock<HashMap<K, V>>;
 
     constructor(lock: SemaphoreLock<HashMap<K, V>>) {
@@ -155,7 +165,7 @@ class HashTableAccessor<K, V> extends IterableObject<[K, V]>implements Map<K, V>
 
     #check(): Throwable<void> {
         if (!this.#lock.locked)
-            throw new Error();
+            throw new LockedHashTableError();
     }
 
     public close() {
@@ -178,7 +188,7 @@ class HashTableAccessor<K, V> extends IterableObject<[K, V]>implements Map<K, V>
         return this.#map.add(...entries);
     }
 
-    public get(key: K): Throwable<V, KeyNotFoundError> {
+    public get(key: K): Optional<V> {
         this.#check();
         return this.#map.get(key);
     }
@@ -216,6 +226,32 @@ class HashTableAccessor<K, V> extends IterableObject<[K, V]>implements Map<K, V>
     public entries(): Stream<[K, V]> {
         this.#check();
         return this.#map.entries();
+    }
+
+    public map<S>(fn: TriFunctional<V, K, this, S>): HashMap<K, S> {
+        const self = this;
+        return new HashMap(function* () {
+            for (const [key, value] of self)
+                yield [key, fn(value, key, self)];
+        }())
+    }
+
+    public flatMap<S>(fn: TriFunctional<V, K, this, S | Map<K, S>>): HashMap<K, S> {
+        const self = this;
+        return new HashMap(function* () {
+            for (const [key, value] of self.iterator()) {
+                const result = fn(value, key, self);
+                if (result instanceof Map)
+                    yield* result.iterator();
+                else
+                    yield [key, result];
+            }
+        }())
+    }
+
+    public pipe(): Supplier<this> {
+        this.#check();
+        return () => this;
     }
 
     public [Symbol.iterator](): IterableIterator<[K, V]> {
