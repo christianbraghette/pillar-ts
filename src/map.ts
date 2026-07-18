@@ -3,7 +3,7 @@ import { Stream } from "./stream";
 import { NativeMap } from "./native";
 import { FunctionalObject, IterableObject } from "./objects";
 import { Optional } from "./optional";
-import { LinkedStack } from "./stack";
+import { ArrayList, Stack } from "./collections";
 
 export abstract class Map<K, V> extends IterableObject<[K, V]> implements FunctionalObject {
     abstract readonly size: number;
@@ -224,7 +224,7 @@ export class CacheMap<K, V> extends HashMap<K, V> {
         }())
     }
 
-    override get [Symbol.toStringTag](): string { return "LinkedHashMap"; }
+    override get [Symbol.toStringTag](): string { return "CacheMap"; }
 
     public static override from<R, S>(iterable: Iterable<[R, S]>): CacheMap<R, S> {
         return new CacheMap(iterable);
@@ -664,7 +664,7 @@ export class TreeMap<K, V> extends SortedMap<K, V> {
      * Default iterator for the TreeMap, yielding [key, value] pairs in sorted order.
      */
     *[Symbol.iterator](): IterableIterator<[K, V]> {
-        const stack = new LinkedStack<BSTNode>();
+        const stack: Stack<BSTNode> = new ArrayList<BSTNode>();
         let current = this.#root;
 
         while (stack.size > 0 || current) {
@@ -689,4 +689,12 @@ export class TreeMap<K, V> extends SortedMap<K, V> {
      * Tag used by Object.prototype.toString.
      */
     get [Symbol.toStringTag](): string { return "TreeMap"; }
+
+    public static from<R, S>(compareFn: Comparator<R>, iterable: Iterable<[R, S]>): TreeMap<R, S> {
+        return new TreeMap(compareFn, iterable);
+    }
+
+    public static of<R, S>(compareFn: Comparator<R>, ...items: [R, S][]): TreeMap<R, S> {
+        return new TreeMap(compareFn, items);
+    }
 }

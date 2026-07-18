@@ -1,6 +1,5 @@
-import { Queue } from "./collections";
+import { ArrayList, Queue } from "./collections";
 import { Consumer, Executor, Supplier } from "./functional";
-import { LinkedList } from "./list";
 
 type RejectReason = 'reset' | 'error' | 'timeout';
 
@@ -18,7 +17,7 @@ export class Semaphore<T> {
     #supplier: Supplier<T>;
     #count: number;
     #maxCount: number;
-    readonly #queue: Queue<QueueNode<T>> = new LinkedList<QueueNode<T>>();
+    readonly #queue: Queue<QueueNode<T>> = new ArrayList<QueueNode<T>>();
 
     public constructor(supplier: Supplier<T>, maxCount: number) {
         this.#supplier = supplier;

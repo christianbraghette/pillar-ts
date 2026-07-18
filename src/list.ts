@@ -1,10 +1,9 @@
 import { Deque, List, SortedList, SortedQueue, Stack, Collection } from "./collections";
 import { Comparator, TriConsumer, TriFunctional } from "./functional";
-import { NativeSet } from "./native";
 import { Stream } from "./stream";
 import { Optional } from "./optional";
 
-export class ArrayList<T> extends List<T> {
+export class ArrayList<T> extends List<T> implements Deque<T>, Stack<T> {
     #data: T[];
 
     constructor(iterable?: Iterable<T>) {
@@ -157,703 +156,10 @@ export class ArrayList<T> extends List<T> {
     }
 }
 
-class LinkedListNode {
-    constructor(public next?: LinkedListNode, public prev?: LinkedListNode) { }
-}
-
-export class LinkedList<T> extends List<T> implements Deque<T>, Stack<T> {
-    #data = new WeakMap<LinkedListNode, T>();
-    #next?: LinkedListNode;
-    #prev?: LinkedListNode;
-    #reversed: boolean = false;
-    #size: number = 0;
-
-    /**
-     * Creates a new LinkedList from an iterable.
-     * @param iterable An iterable object to initialize the list with.
-     */
-    constructor(iterable?: Iterable<T>) {
-        super();
-        for (const item of iterable ?? [])
-            this.add(item);
-    }
-
-    get #head(): LinkedListNode | undefined {
-        return this.#reversed ? this.#prev : this.#next;
-    }
-
-    set #head(node: LinkedListNode | undefined) {
-        if (this.#reversed)
-            this.#prev = node;
-        else
-            this.#next = node;
-    }
-
-    get #tail(): LinkedListNode | undefined {
-        return this.#reversed ? this.#next : this.#prev;
-    }
-
-    set #tail(node: LinkedListNode | undefined) {
-        if (this.#reversed)
-            this.#next = node;
-        else
-            this.#prev = node;
-    }
-
-    #getValue(node: LinkedListNode): T {
-        if (!this.#data.has(node))
-            throw new Error("Data leaking");
-        return this.#data.get(node)!;
-    }
-
-    #getNext(node: LinkedListNode): LinkedListNode | undefined {
-        return this.#reversed ? node.prev : node.next;
-    }
-
-    #setNext(curr: LinkedListNode, next: LinkedListNode | undefined): void {
-        if (this.#reversed)
-            curr.prev = next;
-        else
-            curr.next = next;
-    }
-
-    #getPrev(node: LinkedListNode): LinkedListNode | undefined {
-        return this.#reversed ? node.next : node.prev;
-    }
-
-    #setPrev(curr: LinkedListNode, prev: LinkedListNode | undefined): void {
-        if (this.#reversed)
-            curr.next = prev;
-        else
-            curr.prev = prev;
-    }
-
-    /**
-     * Returns the first element of the list.
-     */
-    public first(): Optional<T> {
-        if (!this.#head)
-            return Optional.empty();
-        return Optional.of(this.#getValue(this.#head));
-    }
-
-    /**
-     * Returns the last element of the list.
-     */
-    public last(): Optional<T> {
-        if (!this.#tail)
-            return Optional.empty();
-        return Optional.of(this.#getValue(this.#tail));
-    }
-
-    public clear(): void {
-        this.#next = undefined;
-        this.#prev = undefined;
-        this.#size = 0;
-    }
-
-    /**
-     * Adds one or more elements to the end of the list.
-     * @param items The elements to add.
-     * @returns The new length of the list.
-     */
-    public add(...items: T[]): number {
-        const size = this.#size;
-        for (const item of items) {
-            const newNode = new LinkedListNode();
-            this.#data.set(newNode, item);
-
-            if (!this.#tail) {
-                this.#head = newNode;
-                this.#tail = newNode;
-            } else {
-                this.#setNext(this.#tail, newNode);
-                this.#setPrev(newNode, this.#tail);
-                this.#tail = newNode;
-            }
-            this.#size++;
-        }
-        return this.#size - size;
-    }
-
-    /**
-     * Adds one or more elements to the beginning of the list.
-     * @param items The elements to add.
-     * @returns The new length of the list.
-     */
-    public addFirst(...items: T[]): number {
-        for (let i = items.length - 1; i >= 0; i--) {
-            const item = items[i];
-            const newNode = new LinkedListNode();
-            this.#data.set(newNode, item);
-
-            if (!this.#head) {
-                this.#head = newNode;
-                this.#tail = newNode;
-            } else {
-                this.#setPrev(this.#head, newNode);
-                this.#setNext(newNode, this.#head);
-                this.#head = newNode;
-            }
-            this.#size++;
-        }
-        return this.#size;
-    }
-
-    /**
-     * Removes and returns the last element of the list.
-     */
-    public removeLast(): Optional<T> {
-        const nodeToRemove = this.#tail;
-        if (!nodeToRemove) return Optional.empty();
-
-        const value = this.#getValue(nodeToRemove);
-        const newTail = this.#getPrev(nodeToRemove);
-
-        this.#tail = newTail;
-        if (this.#tail)
-            this.#setNext(this.#tail, undefined);
-        else
-            this.#head = undefined;
-
-        nodeToRemove.next = undefined;
-        nodeToRemove.prev = undefined;
-
-        this.#data.delete(nodeToRemove);
-        this.#size--;
-        return Optional.of(value);
-    }
-
-    /**
-     * Removes and returns the first element of the list.
-     */
-    public remove(): Optional<T> {
-        const nodeToRemove = this.#head;
-        if (!nodeToRemove)
-            return Optional.empty();
-
-        const value = this.#getValue(nodeToRemove);
-        const newHead = this.#getNext(nodeToRemove);
-
-        this.#head = newHead;
-
-        if (this.#head) {
-            this.#setPrev(this.#head, undefined);
-        } else {
-            this.#tail = undefined;
-        }
-
-        nodeToRemove.next = undefined;
-        nodeToRemove.prev = undefined;
-
-        this.#data.delete(nodeToRemove);
-        this.#size--;
-        return Optional.of(value);
-    }
-
-    //### LINEAR METHODS
-
-    /**
-     * Gets the number of elements in the list.
-     */
-    public get size(): number {
-        return this.#size;
-    };
-
-    /**
-     * Determines whether the list includes a certain value.
-     * @param searchElement The element to search for.
-     */
-    public has(...items: T[]): boolean {
-        if (items.length === 0) return false;
-        let set = new NativeSet(items);
-        for (const item of this) {
-            if (set.has(item)) {
-                set.delete(item);
-            }
-            if (set.size === 0) return true;
-        }
-        return false;
-    }
-
-    /**
-     * Removes specific elements from the list and maintains structural integrity.
-     * @param items The elements to remove.
-     * @returns The number of elements actually removed.
-     */
-    public delete(...items: T[]): number {
-        const initialSize = this.#size;
-        if (initialSize === 0 || items.length === 0) return 0;
-
-        // Usiamo un contatore per tracciare quante occorrenze di ciascun elemento dobbiamo rimuovere
-        const itemsToRemove = new Map<T, number>();
-        for (const item of items) {
-            itemsToRemove.set(item, (itemsToRemove.get(item) ?? 0) + 1);
-        }
-
-        let node = this.#head;
-        while (node && itemsToRemove.size > 0) {
-            const nextNode = this.#getNext(node);
-            const value = this.#data.get(node)!;
-
-            if (itemsToRemove.has(value)) {
-                const prevNode = this.#getPrev(node);
-
-                // Aggiorna i collegamenti dei nodi adiacenti
-                if (prevNode) this.#setNext(prevNode, nextNode);
-                else this.#head = nextNode;
-
-                if (nextNode) this.#setPrev(nextNode, prevNode);
-                else this.#tail = prevNode;
-
-                node.next = undefined;
-                node.prev = undefined;
-                this.#data.delete(node);
-                this.#size--;
-
-                const remaining = itemsToRemove.get(value)! - 1;
-                if (remaining === 0) {
-                    itemsToRemove.delete(value);
-                } else {
-                    itemsToRemove.set(value, remaining);
-                }
-            }
-            node = nextNode;
-        }
-
-        return initialSize - this.#size;
-    }
-
-    //### INDEXABLE METHODS
-
-    /**
-     * Returns the element at the specified index. Supports negative indexing.
-     * @param index Zero-based index.
-     */
-    public get(index: number): Optional<T> {
-        let target = index < 0 ? this.size + index : index;
-        if (target < 0 || target >= this.size) return Optional.empty();
-
-        const fromStart = target < this.size / 2;
-        let curr = fromStart ? this.#head : this.#tail;
-        let count = fromStart ? 0 : this.size - 1;
-
-        while (curr) {
-            if (count === target) {
-                const value = this.#getValue(curr);
-                if (!value)
-                    return Optional.empty();
-                return Optional.of(value);
-            }
-            curr = fromStart ? this.#getNext(curr) : this.#getPrev(curr);
-            fromStart ? count++ : count--;
-        }
-        return Optional.empty();
-    }
-
-    /**
-     * Returns the index of the first occurrence of a value.
-     * @param searchElement The element to locate.
-     * @param fromIndex The index to start the search from.
-     */
-    public indexOf(searchElement: T, fromIndex: number = 0): number {
-        let i = 0;
-        let start = fromIndex < 0 ? Math.max(this.size + fromIndex, 0) : fromIndex;
-
-        for (let node = this.#head; !!node; node = this.#getNext(node)) {
-            if (i >= start && this.#getValue(node) === searchElement) return i;
-            i++;
-        }
-        return -1;
-    }
-
-    /**
-     * Returns the index of the last occurrence of a value.
-     * @param searchElement The element to locate.
-     * @param fromIndex The index to start the search from (searching backwards).
-     */
-    public lastIndexOf(searchElement: T, fromIndex: number = this.size - 1): number {
-        let i = this.size - 1;
-        let start = fromIndex < 0 ? this.size + fromIndex : fromIndex;
-
-        for (let node = this.#tail; !!node; node = this.#getPrev(node)) {
-            if (i <= start && this.#getValue(node) === searchElement) return i;
-            i--;
-        }
-        return -1;
-    }
-
-    public set(index: number, item: T): boolean {
-        let target = index < 0 ? this.size + index : index;
-        if (target < 0 || target >= this.size)
-            return false;
-
-        const fromStart = target < this.size / 2;
-        let curr = fromStart ? this.#head : this.#tail;
-        let count = fromStart ? 0 : this.size - 1;
-
-        while (curr) {
-            if (count === target) {
-                this.#data.set(curr, item);
-            }
-            curr = fromStart ? this.#getNext(curr) : this.#getPrev(curr);
-            fromStart ? count++ : count--;
-        }
-        return true;
-    };
-
-    /**
-     * Returns a new LinkedList containing a portion of the list.
-     * @param start The beginning index.
-     * @param end The end index (exclusive).
-     */
-    public slice(start: number = 0, end: number = this.size): LinkedList<T> {
-        const s = start < 0 ? Math.max(this.size + start, 0) : Math.min(start, this.size);
-        const e = end < 0 ? Math.max(this.size + end, 0) : Math.min(end, this.size);
-
-        const self = this;
-        const sliceGenerator = function* () {
-            let i = 0;
-            for (const val of self) {
-                if (i >= s && i < e) yield val;
-                if (i >= e) break;
-                i++;
-            }
-        };
-        return new LinkedList<T>(sliceGenerator());
-    }
-
-    /**
-     * Changes the contents of the list by removing or replacing existing elements.
-     * @param start The index at which to start changing the list.
-     * @param deleteCount The number of elements to remove.
-     * @param items The elements to add to the list.
-     * @returns A new LinkedList containing the deleted elements.
-     */
-    public splice(start: number, deleteCount: number, ...items: T[]): LinkedList<T> {
-        const removed = new LinkedList<T>();
-        if (!this.#head)
-            return removed;
-
-        const s = start < 0 ? Math.max(this.size + start, 0) : Math.min(start, this.size);
-        const d = Math.max(Math.min(deleteCount, this.size - s), 0);
-
-        let cursor: LinkedListNode | undefined = this.#head;
-        for (let i = 0; cursor && i < s; i++)
-            cursor = this.#getNext(cursor);
-
-        for (let i = 0; cursor && i < d; i++) {
-            const val = this.#getValue(cursor);
-            removed.add(val);
-
-            const nextNode = this.#getNext(cursor);
-            const prevNode = this.#getPrev(cursor);
-
-            if (prevNode) this.#setNext(prevNode, nextNode);
-            else this.#head = nextNode;
-
-            if (nextNode) this.#setPrev(nextNode, prevNode);
-            else this.#tail = prevNode;
-
-            const toDelete = cursor;
-            cursor = nextNode;
-
-            this.#data.delete(toDelete);
-            this.#size--;
-        }
-
-        for (const item of items) {
-            const newNode = new LinkedListNode();
-            this.#data.set(newNode, item);
-
-            if (!cursor) {
-                const beforeNode = this.#tail;
-                if (!beforeNode) {
-                    this.#head = newNode;
-                    this.#tail = newNode;
-                } else {
-                    this.#setNext(beforeNode, newNode);
-                    this.#setPrev(newNode, beforeNode);
-                    this.#tail = newNode;
-                }
-            } else {
-                const beforeNode = this.#getPrev(cursor);
-                if (!beforeNode) {
-                    this.#setNext(newNode, cursor);
-                    this.#setPrev(cursor, newNode);
-                    this.#head = newNode;
-                } else {
-                    this.#setNext(beforeNode, newNode);
-                    this.#setPrev(newNode, beforeNode);
-                    this.#setNext(newNode, cursor);
-                    this.#setPrev(cursor, newNode);
-                }
-            }
-            this.#size++;
-        }
-
-        return new LinkedList<T>(removed);
-    }
-
-    public forEach(callbackfn: TriConsumer<T, number, this>): void {
-        let i = 0;
-        for (const value of this) {
-            callbackfn(value, i++, this);
-        }
-    }
-
-    public toSorted(comparator: Comparator<T>): TreeList<T> {
-        return new TreeList(comparator, this);
-    }
-
-    /**
-     * Sorts the elements of the list in place and returns the list.
-     * @param compareFn Function used to determine the order of the elements.
-     */
-    public sort(compareFn: Comparator<T>): this {
-        if (this.size <= 1) return this;
-
-        let head = this.#head;
-
-        for (let step = 1; step < this.size; step *= 2) {
-            let curr: LinkedListNode | undefined = head;
-            let newHead: LinkedListNode | undefined = undefined;
-            let listTail: LinkedListNode | undefined = undefined;
-
-            while (curr) {
-                const left = curr;
-                const right = this.#split(left, step);
-                curr = this.#split(right, step);
-
-                const merged = this.#merge(left, right, compareFn);
-
-                if (!newHead) {
-                    newHead = merged;
-                } else {
-                    this.#setNext(listTail!, merged);
-                    if (merged) this.#setPrev(merged, listTail);
-                }
-
-                if (!listTail)
-                    listTail = newHead;
-                while (listTail && this.#getNext(listTail))
-                    listTail = this.#getNext(listTail);
-            }
-
-            head = newHead;
-        }
-
-        this.#head = head;
-        if (head) this.#setPrev(head, undefined);
-
-        let logicalTail = head;
-        while (logicalTail && this.#getNext(logicalTail))
-            logicalTail = this.#getNext(logicalTail);
-        this.#tail = logicalTail;
-
-        return this;
-    }
-
-
-    /**
-     * Splits the list after `n` nodes and returns the rest.
-     * (invariato, già corretto)
-     */
-    #split(node: LinkedListNode | undefined, n: number): LinkedListNode | undefined {
-        if (!node) return undefined;
-
-        for (let i = 1; i < n && this.#getNext(node); i++)
-            node = this.#getNext(node)!;
-
-        const rest = this.#getNext(node);
-        this.#setNext(node, undefined);
-        if (rest) this.#setPrev(rest, undefined);
-        return rest;
-    }
-
-    /**
-     * Merges two sorted sublists iteratively (no recursion, O(1) stack).
-     */
-    #merge(left: LinkedListNode | undefined, right: LinkedListNode | undefined, compare: (a: T, b: T) => number): LinkedListNode | undefined {
-        if (!left) return right;
-        if (!right) return left;
-
-        const dummy = new LinkedListNode();
-        let curr: LinkedListNode = dummy;
-
-        while (left && right) {
-            const leftVal = this.#data.get(left)!;
-            const rightVal = this.#data.get(right)!;
-
-            if (compare(leftVal, rightVal) <= 0) {
-                const nextLeft = this.#getNext(left);   // ← salva prima
-                this.#setNext(curr, left);
-                this.#setPrev(left, curr);
-                this.#setNext(left, undefined);          // ← spezza il vecchio link in sicurezza
-                curr = left;
-                left = nextLeft;
-            } else {
-                const nextRight = this.#getNext(right);  // ← salva prima
-                this.#setNext(curr, right);
-                this.#setPrev(right, curr);
-                this.#setNext(right, undefined);         // ← spezza il vecchio link in sicurezza
-                curr = right;
-                right = nextRight;
-            }
-        }
-
-        const remainder = left ?? right;
-        this.#setNext(curr, remainder);
-        if (remainder) this.#setPrev(remainder, curr);
-
-        const result = this.#getNext(dummy);
-        if (result) this.#setPrev(result, undefined);
-        return result;
-    }
-
-    //### SPECIFIC METHODS
-
-    /**
-     * Rotates the elements of the list.
-     * @param n If positive, rotates to the right. If negative, rotates to the left.
-     */
-    public rotate(n: number = 1): this {
-        if (this.size <= 1 || n % this.size === 0) return this;
-
-        let k = n % this.size;
-        if (k < 0) k += this.size;
-
-        let newTailIndex = this.size - k - 1;
-        let newTail = this.#head;
-
-        if (newTailIndex < this.size / 2) {
-            for (let i = 0; newTail && i < newTailIndex; i++)
-                newTail = this.#getNext(newTail);
-        } else {
-            newTail = this.#tail;
-            for (let i = 0; newTail && i < (this.size - 1 - newTailIndex); i++)
-                newTail = this.#getPrev(newTail);
-        }
-
-        if (!newTail) return this;
-
-        const newHead = this.#getNext(newTail);
-        const oldHead = this.#head;
-        const oldTail = this.#tail;
-
-        if (newHead && newTail && oldHead && oldTail) {
-            this.#setNext(oldTail, oldHead);
-            this.#setPrev(oldHead, oldTail);
-
-            this.#head = newHead;
-            this.#tail = newTail;
-
-            this.#setPrev(this.#head, undefined);
-            this.#setNext(this.#tail, undefined);
-        }
-
-        return this;
-    }
-
-    /**
-     * Remove duplicate elements in the list.
-     */
-    public deduplicate(): this {
-        const seen = new Set<T>();
-        return this.#filterInPlace((val) => {
-            if (seen.has(val)) return false;
-            seen.add(val);
-            return true;
-        });
-    }
-
-    /**
-     * Reverses the order of the elements in O(1) time.
-     * @returns The list instance.
-     */
-    public reverse(): this {
-        this.#reversed = !this.#reversed;
-        return this;
-    }
-
-    #filterInPlace(predicate: (value: T, index: number, obj: this) => boolean): this {
-        let node = this.#head;
-        let i = 0;
-
-        while (node) {
-            const val = this.#getValue(node)!;
-            const next = this.#getNext(node);
-
-            if (!predicate(val, i++, this)) {
-                const p = this.#getPrev(node);
-                const n = this.#getNext(node);
-
-                if (p) this.#setNext(p, n);
-                else this.#head = n;
-
-                if (n) this.#setPrev(n, p);
-                else this.#tail = p;
-
-                node.next = undefined;
-                node.prev = undefined;
-
-                this.#data.delete(node);
-                this.#size--;
-            }
-            node = next;
-        }
-        return this;
-    }
-
-    public map<S>(fn: TriFunctional<T, number, this, S>): LinkedList<S> {
-        const self = this;
-        return new LinkedList(function* () {
-            let i = 0;
-            for (const value of self)
-                yield fn(value, i++, self);
-        }())
-    }
-
-    public flatMap<S>(fn: TriFunctional<T, number, this, S | Collection<S>>): LinkedList<S> {
-        const self = this;
-        return new LinkedList(function* () {
-            let i = 0;
-            for (const value of self.iterator()) {
-                const result = fn(value, i++, self);
-                if (result instanceof Collection)
-                    yield* result.iterator();
-                else
-                    yield result;
-            }
-        }())
-    }
-
-    public stream(): Stream<T> {
-        return new Stream(() => this);
-    };
-
-    /**
-     * Default iterator for the list.
-     */
-    *[Symbol.iterator](): IterableIterator<T> {
-        for (let node = this.#head; !!node; node = this.#getNext(node))
-            yield this.#getValue(node)!;
-    }
-
-    get [Symbol.toStringTag](): string { return "LinkedList" };
-
-    public static from<S>(iterable: Iterable<S>): LinkedList<S> {
-        return new LinkedList(iterable);
-    }
-
-    public static of<S>(...items: S[]): LinkedList<S> {
-        return new LinkedList(items);
-    }
-}
-
 type NodeColor = "RED" | "BLACK";
 
 class TreeNode {
+    constructor(public index: number) {}
     left?: TreeNode;
     right?: TreeNode;
     parent?: TreeNode;
@@ -863,7 +169,7 @@ class TreeNode {
 
 export class TreeList<T> extends SortedList<T> implements SortedQueue<T> {
     #compareFn: Comparator<T>;
-    #data = new WeakMap<TreeNode, T>();
+    #data = new Array<T>();
     #root?: TreeNode;
     #size: number = 0;
 
@@ -877,7 +183,7 @@ export class TreeList<T> extends SortedList<T> implements SortedQueue<T> {
     }
 
     #getColor(node?: TreeNode): NodeColor {
-        return node ? node.color : "BLACK"; // Le foglie/undefined sono nere
+        return node ? node.color : "BLACK";
     }
 
     #rotateLeft(x: TreeNode): void {
@@ -932,15 +238,14 @@ export class TreeList<T> extends SortedList<T> implements SortedQueue<T> {
     }
 
     #insertItem(item: T): void {
-        const newNode = new TreeNode();
-        this.#data.set(newNode, item);
+        const newNode = new TreeNode(this.#data.push(item) - 1);
 
         let y: TreeNode | undefined = undefined;
         let x = this.#root;
 
         while (x) {
             y = x;
-            const currentVal = this.#data.get(x)!;
+            const currentVal = this.#data[x.index];
             const cmp = this.#compareFn(item, currentVal);
 
             if (cmp === 0) {
@@ -957,7 +262,7 @@ export class TreeList<T> extends SortedList<T> implements SortedQueue<T> {
         if (!y) {
             this.#root = newNode;
         } else {
-            const yVal = this.#data.get(y)!;
+            const yVal = this.#data[y.index];
             if (this.#compareFn(item, yVal) < 0) y.left = newNode;
             else y.right = newNode;
         }
@@ -1065,7 +370,7 @@ export class TreeList<T> extends SortedList<T> implements SortedQueue<T> {
             y.color = z.color;
         }
 
-        this.#data.delete(z);
+        delete this.#data[z.index];
         this.#size--;
 
         if (yOriginalColor === "BLACK" && x) {
@@ -1138,14 +443,14 @@ export class TreeList<T> extends SortedList<T> implements SortedQueue<T> {
         if (!this.#root) return Optional.empty();
         let curr = this.#root;
         while (curr.left) curr = curr.left;
-        return Optional.of(this.#data.get(curr)!);
+        return Optional.of(this.#data[curr.index]);
     }
 
     public last(): Optional<T> {
         if (!this.#root) return Optional.empty();
         let curr = this.#root;
         while (curr.right) curr = curr.right;
-        return Optional.of(this.#data.get(curr)!);
+        return Optional.of(this.#data[curr.index]);
     }
 
     public remove(): Optional<T> {
@@ -1174,7 +479,7 @@ export class TreeList<T> extends SortedList<T> implements SortedQueue<T> {
 
     #findNode(node: TreeNode | undefined, item: T): TreeNode | undefined {
         if (!node) return undefined;
-        const cmp = this.#compareFn(item, this.#data.get(node)!);
+        const cmp = this.#compareFn(item, this.#data[node.index]);
         if (cmp === 0) return node;
         return cmp < 0 ? this.#findNode(node.left, item) : this.#findNode(node.right, item);
     }
@@ -1288,7 +593,7 @@ export class TreeList<T> extends SortedList<T> implements SortedQueue<T> {
 
     public map<S>(fn: TriFunctional<T, number, this, S>): List<S> {
         const self = this;
-        return new LinkedList(function* () {
+        return new ArrayList(function* () {
             let i = 0;
             for (const value of self)
                 yield fn(value, i++, self);
@@ -1297,7 +602,7 @@ export class TreeList<T> extends SortedList<T> implements SortedQueue<T> {
 
     public flatMap<S>(fn: TriFunctional<T, number, this, S | Collection<S>>): List<S> {
         const self = this;
-        return new LinkedList(function* () {
+        return new ArrayList(function* () {
             let i = 0;
             for (const value of self.iterator()) {
                 const result = fn(value, i++, self);
@@ -1309,7 +614,7 @@ export class TreeList<T> extends SortedList<T> implements SortedQueue<T> {
         }())
     }
 
-    public toUnsorted(): LinkedList<T> { return new LinkedList(this); }
+    public toUnsorted(): ArrayList<T> { return new ArrayList(this); }
 
     public stream(): Stream<T> {
         return new Stream(() => this);
@@ -1321,7 +626,7 @@ export class TreeList<T> extends SortedList<T> implements SortedQueue<T> {
             if (!node) return;
             yield* traverse(node.left);
             for (let i = 0; i < node.count; i++) {
-                yield self.#data.get(node)!;
+                yield self.#data[node.index];
             }
             yield* traverse(node.right);
         }

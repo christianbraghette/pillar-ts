@@ -1,9 +1,9 @@
-import { Set, SortedSet, Collection } from "./collections";
+import { Set, SortedSet, Collection, Stack } from "./collections";
 import { Comparator, TriFunctional } from "./functional";
-import { LinkedList } from "./list";
 import { Optional } from "./optional";
 import { Stream } from "./stream";
 import { NativeSet } from "./native";
+import { ArrayList } from "./list";
 
 export class HashSet<T> extends Set<T> {
     #set: NativeSet<T>;
@@ -151,8 +151,63 @@ export class HashSet<T> extends Set<T> {
         return new Stream(() => this);
     };
 
+    public get [Symbol.toStringTag](): string { return "HashSet"; }
+
     [Symbol.iterator](): IterableIterator<T> {
         return this.#set.values();
+    }
+
+    public static from<S>(iterable: Iterable<S>): HashSet<S> {
+        return new HashSet(iterable);
+    }
+
+    public static of<S>(...items: S[]): HashSet<S> {
+        return new HashSet(items);
+    }
+}
+
+export class CacheSet<T> extends HashSet<T> {
+
+    public override add(...items: T[]): number {
+        const size = this.size;
+        for (const item of items) {
+            super.delete(item);
+            super.add(item);
+        }
+        return this.size - size;
+    }
+
+    public override map<S>(fn: TriFunctional<T, number, this, S>): CacheSet<S> {
+        const self = this;
+        return new CacheSet(function* () {
+            let i = 0;
+            for (const item of self.iterator())
+                yield fn(item, i++, self);
+        }())
+    }
+
+    public override flatMap<S>(fn: TriFunctional<T, number, this, S | Collection<S>>): CacheSet<S> {
+        const self = this;
+        return new CacheSet(function* () {
+            let i = 0;
+            for (const item of self.iterator()) {
+                const result = fn(item, i++, self);
+                if (result instanceof Set)
+                    yield* result.iterator();
+                else
+                    yield result;
+            }
+        }())
+    }
+
+    override get [Symbol.toStringTag](): string { return "CacheSet"; }
+
+    public static override from<S>(iterable: Iterable<S>): CacheSet<S> {
+        return new CacheSet(iterable);
+    }
+
+    public static override of<S>(...items: S[]): CacheSet<S> {
+        return new CacheSet(items);
     }
 }
 
@@ -593,7 +648,7 @@ export class TreeSet<T> extends SortedSet<T> {
      * Default iterator that returns values in sorted order.
      */
     *[Symbol.iterator](): IterableIterator<T> {
-        const stack = new LinkedList<TreeNode>();
+        const stack: Stack<TreeNode> = new ArrayList<TreeNode>();
         let current = this.#root;
         while (stack.size > 0 || current) {
             while (current) {
@@ -613,4 +668,12 @@ export class TreeSet<T> extends SortedSet<T> {
     }
 
     get [Symbol.toStringTag](): string { return "TreeSet"; }
+
+    public static from<S>(compareFn: Comparator<S>, iterable: Iterable<S>): TreeSet<S> {
+        return new TreeSet(compareFn, iterable);
+    }
+
+    public static of<S>(compareFn: Comparator<S>, ...items: S[]): TreeSet<S> {
+        return new TreeSet(compareFn, items);
+    }
 }

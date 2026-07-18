@@ -6,9 +6,9 @@ export * from "./stream";
 
 //Collections
 export {
-    Collection, List, Queue, Deque, Set, SortedSet,
-    Stack, LinkedList, ArrayList, TreeList,
-    PriorityQueue, HashSet, TreeSet, LinkedStack
+    Collection, List, Queue, Deque, Set,
+    SortedSet, Stack, ArrayList, TreeList,
+    PriorityQueue, HashSet, TreeSet,
 } from "./collections";
 
 //Maps

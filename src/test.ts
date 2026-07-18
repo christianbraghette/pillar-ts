@@ -1,4 +1,4 @@
-import { LinkedList, LinkedStack, Stack } from "./collections";
+import { Stack } from "./collections";
 import { Stream } from "./stream";
 import { Consumer, Functional, Optional, pipe, UnaryOperator } from "./utils";
 

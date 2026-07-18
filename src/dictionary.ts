@@ -10,10 +10,10 @@ class KeyNotFoundError extends Error {
 export class Dictionary<T> {
     [key: string | number]: T;
 
-    #data: Map<string, T>;
+    #data: { [key: string]: T };
 
     constructor(iterable?: Iterable<[keyof any, T]>) {
-        this.#data = new Map<string, T>(Stream.from(iterable ?? []).map(([key, value]) => [String(key), value]))
+        this.#data = Object.fromEntries(Stream.from(iterable ?? []).map(([key, value]) => [String(key), value]))
         return new Proxy(this, {
             get(target, prop) {
                 if (typeof prop === 'symbol' && prop in target) {
@@ -24,44 +24,44 @@ export class Dictionary<T> {
                     return value;
                 }
 
-                if (!target.#data.has(prop as string)) {
+                if (!(prop in target.#data)) {
                     throw new KeyNotFoundError(prop, Dictionary.name);
                 }
 
-                return target.#data.get(prop as string);
+                return target.#data[prop as string];
             },
             set(target, prop, value) {
-                target.#data.set(prop as string, value);
+                target.#data[prop as string] = value;
                 return true;
             },
             has(target, prop) {
                 if (Reflect.has(target, prop)) {
                     return true;
                 }
-                return target.#data.has(prop as string);
+                return prop in target.#data;
             },
             ownKeys(target) {
-                return Array.from(target.#data.keys());
+                return Object.getOwnPropertyNames(target.#data);
             },
             getOwnPropertyDescriptor(target, prop) {
-                if (target.#data.has(prop as string)) {
+                if (prop in target.#data) {
                     return {
                         enumerable: true,
                         configurable: true,
-                        value: target.#data.get(prop as string)
+                        value: target.#data[prop as string]
                     };
                 }
                 return Reflect.getOwnPropertyDescriptor(target, prop);
             },
             deleteProperty(target, prop) {
-                if (target.#data.has(prop as string)) {
-                    return target.#data.delete(prop as string);
+                if (prop in target.#data) {
+                    return delete target.#data[prop as string];
                 }
                 return Reflect.deleteProperty(target, prop);
             },
             defineProperty(target, prop, descriptor) {
                 if ('value' in descriptor) {
-                    target.#data.set(prop as string, descriptor.value);
+                    target.#data[prop as string] = descriptor.value;
                     return true;
                 }
                 return Reflect.defineProperty(target, prop, descriptor);
@@ -70,7 +70,7 @@ export class Dictionary<T> {
     }
 
     public [Symbol.iterator](): IterableIterator<[string, T]> {
-        return this.#data.entries();
+        return Object.entries(this.#data)[Symbol.iterator]();
     }
 
     public get [Symbol.toStringTag](): string {

@@ -10,7 +10,6 @@ export class Result<T extends Throwable<any>> extends IterableObject<Try<T>> imp
     #value: Optional<Try<T>>;
     #error: Catch<T>;
 
-    // Costruttore pubblico basato su Supplier (Eager)
     constructor(supplier: Supplier<T>) {
         super();
         try {

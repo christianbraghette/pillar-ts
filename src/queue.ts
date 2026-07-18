@@ -1,6 +1,6 @@
 import { Queue, Collection } from "./collections";
 import { Comparator, Supplier, TriConsumer, TriFunctional } from "./functional";
-import { ArrayList, LinkedList } from "./list";
+import { ArrayList } from "./list";
 import { IterableObject } from "./objects";
 import { Optional } from "./optional";
 import { Stream } from "./stream";
@@ -125,18 +125,18 @@ export class PriorityQueue<T> extends IterableObject<T> implements Queue<T> {
         return Array.from(this);
     }
 
-    public map<S>(fn: TriFunctional<T, number, this, S>): LinkedList<S> {
+    public map<S>(fn: TriFunctional<T, number, this, S>): Queue<S> {
         const self = this;
-        return new LinkedList(function* () {
+        return new ArrayList(function* () {
             let i = 0;
             for (const value of self)
                 yield fn(value, i++, self);
         }());
     }
 
-    public flatMap<S>(fn: TriFunctional<T, number, this, S | Collection<S>>): LinkedList<S> {
+    public flatMap<S>(fn: TriFunctional<T, number, this, S | Collection<S>>): Queue<S> {
         const self = this;
-        return new LinkedList(function* () {
+        return new ArrayList(function* () {
             let i = 0;
             for (const value of self.iterator()) {
                 const result = fn(value, i++, self);
