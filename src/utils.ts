@@ -1,6 +1,5 @@
-import { SortedQueue } from "./collections";
+import { SortedArrayList, SortedQueue } from "./collections";
 import { Comparator, Functional, Supplier } from "./functional";
-import { TreeList } from "./list";
 
 export { Optional } from "./optional";
 export { Result } from "./result";
@@ -18,7 +17,7 @@ class IndexOutOfBound extends Error {
 export class Indexer {
     #maxIndex: number;
     #index = 0;
-    #free: SortedQueue<number> = new TreeList<number>(Comparator.natural());
+    #free: SortedQueue<number> = new SortedArrayList<number>(Comparator.natural());
 
     constructor(max?: number) {
         if (!max || max > Number.MAX_SAFE_INTEGER)

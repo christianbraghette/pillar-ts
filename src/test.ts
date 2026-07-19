@@ -1,6 +1,5 @@
-import { Stack } from "./collections";
 import { Stream } from "./stream";
-import { Consumer, Functional, Optional, pipe, UnaryOperator } from "./utils";
+import { Consumer, Functional, pipe } from "./utils";
 
 /*let test = HashTable.of([1, "Dio"], [2, "Cane"]);
 test.forEach((value) => console.log(value));

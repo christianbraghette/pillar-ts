@@ -3,7 +3,6 @@ import { Stream } from "./stream";
 import { NativeMap } from "./native";
 import { FunctionalObject, IterableObject } from "./objects";
 import { Optional } from "./optional";
-import { ArrayList, Stack } from "./collections";
 
 export abstract class Map<K, V> extends IterableObject<[K, V]> implements FunctionalObject {
     abstract readonly size: number;
@@ -235,22 +234,22 @@ export class CacheMap<K, V> extends HashMap<K, V> {
     }
 }
 
-class BTreeNode<K, V> {
+class TreeNode<K, V> {
     public entries: [K, V][] = [];
-    public children: BTreeNode<K, V>[] = [];
+    public children: TreeNode<K, V>[] = [];
     public isLeaf: boolean = true;
 }
 
 export class TreeMap<K, V> extends SortedMap<K, V> {
     #size: number = 0;
-    #root: BTreeNode<K, V>;
+    #root: TreeNode<K, V>;
     #compareFn: Comparator<K>;
     readonly #M = 4;
 
     constructor(compareFn: Comparator<K>, iterable?: Iterable<[K, V]>) {
         super();
         this.#compareFn = compareFn;
-        this.#root = new BTreeNode<K, V>();
+        this.#root = new TreeNode<K, V>();
         for (const [key, value] of iterable ?? []) {
             this.set(key, value);
         }
@@ -264,7 +263,7 @@ export class TreeMap<K, V> extends SortedMap<K, V> {
         const root = this.#root;
 
         if (root.entries.length === this.#M - 1) {
-            const newRoot = new BTreeNode<K, V>();
+            const newRoot = new TreeNode<K, V>();
             newRoot.isLeaf = false;
             newRoot.children.push(root);
             this.#root = newRoot;
@@ -277,7 +276,7 @@ export class TreeMap<K, V> extends SortedMap<K, V> {
         return this;
     }
 
-    #insertNonFull(node: BTreeNode<K, V>, key: K, value: V): void {
+    #insertNonFull(node: TreeNode<K, V>, key: K, value: V): void {
         let i = node.entries.length - 1;
 
         if (node.isLeaf) {
@@ -317,8 +316,8 @@ export class TreeMap<K, V> extends SortedMap<K, V> {
         }
     }
 
-    #splitChild(parent: BTreeNode<K, V>, index: number, child: BTreeNode<K, V>): void {
-        const newChild = new BTreeNode<K, V>();
+    #splitChild(parent: TreeNode<K, V>, index: number, child: TreeNode<K, V>): void {
+        const newChild = new TreeNode<K, V>();
         newChild.isLeaf = child.isLeaf;
 
         const medianIndex = Math.floor((this.#M - 1) / 2);
@@ -344,7 +343,7 @@ export class TreeMap<K, V> extends SortedMap<K, V> {
     }
 
     public get(key: K): Optional<V> {
-        let current: BTreeNode<K, V> | undefined = this.#root;
+        let current: TreeNode<K, V> | undefined = this.#root;
 
         while (current) {
             let i = 0;
@@ -365,7 +364,7 @@ export class TreeMap<K, V> extends SortedMap<K, V> {
     public has(...keys: K[]): boolean {
         if (keys.length === 0) return false;
         for (const key of keys) {
-            let current: BTreeNode<K, V> | undefined = this.#root;
+            let current: TreeNode<K, V> | undefined = this.#root;
             let found = false;
 
             while (current) {
@@ -401,7 +400,7 @@ export class TreeMap<K, V> extends SortedMap<K, V> {
         return initialSize - this.#size;
     }
 
-    #deleteTopDown(node: BTreeNode<K, V>, key: K): void {
+    #deleteTopDown(node: TreeNode<K, V>, key: K): void {
         let i = 0;
         const len = node.entries.length;
         while (i < len && this.#compareFn(key, node.entries[i][0]) > 0) {
@@ -466,7 +465,7 @@ export class TreeMap<K, V> extends SortedMap<K, V> {
         }
     }
 
-    #mergeChildren(parent: BTreeNode<K, V>, index: number): void {
+    #mergeChildren(parent: TreeNode<K, V>, index: number): void {
         const left = parent.children[index];
         const right = parent.children[index + 1];
         const promoted = parent.entries.splice(index, 1)[0];
@@ -479,7 +478,7 @@ export class TreeMap<K, V> extends SortedMap<K, V> {
         }
     }
 
-    #getExtremeEntry(node: BTreeNode<K, V>, side: "first" | "last"): [K, V] {
+    #getExtremeEntry(node: TreeNode<K, V>, side: "first" | "last"): [K, V] {
         let current = node;
         while (!current.isLeaf) {
             current = current.children[side === "first" ? 0 : current.children.length - 1];
@@ -488,7 +487,7 @@ export class TreeMap<K, V> extends SortedMap<K, V> {
     }
 
     public clear(): void {
-        this.#root = new BTreeNode<K, V>();
+        this.#root = new TreeNode<K, V>();
         this.#size = 0;
     }
 
@@ -594,8 +593,8 @@ export class TreeMap<K, V> extends SortedMap<K, V> {
     }
 
     *[Symbol.iterator](): IterableIterator<[K, V]> {
-        const stack: { node: BTreeNode<K, V>; index: number }[] = [];
-        let current: BTreeNode<K, V> | undefined = this.#root;
+        const stack: { node: TreeNode<K, V>; index: number }[] = [];
+        let current: TreeNode<K, V> | undefined = this.#root;
         let idx = 0;
 
         while (stack.length > 0 || current) {

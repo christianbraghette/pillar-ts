@@ -1,4 +1,4 @@
-import { Set, SortedSet, Collection, Stack } from "./collections";
+import { Set, SortedSet, Collection } from "./collections";
 import { Comparator, TriConsumer, TriFunctional } from "./functional";
 import { Optional } from "./optional";
 import { Stream } from "./stream";
