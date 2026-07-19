@@ -1,11 +1,11 @@
-import { Queue, Collection } from "./collections";
+import { Collection, Queue, SortedQueue } from "./collections";
 import { Comparator, Supplier, TriConsumer, TriFunctional } from "./functional";
 import { ArrayList } from "./list";
 import { IterableObject } from "./objects";
 import { Optional } from "./optional";
 import { Stream } from "./stream";
 
-export class PriorityQueue<T> extends IterableObject<T> implements Queue<T> {
+export class PriorityQueue<T> extends IterableObject<T> implements SortedQueue<T> {
     #array = new ArrayList<T>();
     #compareFn: Comparator<T>;
 
@@ -166,18 +166,14 @@ export class PriorityQueue<T> extends IterableObject<T> implements Queue<T> {
         };
 
         while (indexHeap.length > 0) {
-            // 1. Estraiamo la radice dell'indexHeap (contiene l'indice del valore minimo corrente)
             const currentIndex = indexHeap[0];
 
-            // Fai lo yield del valore reale corrispondente
             yield this.#array.get(currentIndex).get();
 
-            // 2. Rimuoviamo la radice dall'indexHeap e riassestiamo (classico pop da heap)
             const lastIndex = indexHeap.pop()!;
             if (indexHeap.length > 0) {
                 indexHeap[0] = lastIndex;
 
-                // Bubble Down nell'indexHeap
                 let idx = 0;
                 while (true) {
                     let smallest = idx;
@@ -198,11 +194,9 @@ export class PriorityQueue<T> extends IterableObject<T> implements Queue<T> {
                 }
             }
 
-            // 3. Generiamo i figli del nodo appena estratto nell'heap originale
             const leftChild = 2 * currentIndex + 1;
             const rightChild = 2 * currentIndex + 2;
 
-            // Se i figli esistono nell'heap originale, inseriamo i loro indici nell'indexHeap
             for (const child of [leftChild, rightChild]) {
                 if (child < this.size) {
                     indexHeap.push(child);

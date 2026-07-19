@@ -46,8 +46,8 @@ export abstract class SortedList<T> extends Collection<T> {
     abstract first(): Optional<T>;
     abstract last(): Optional<T>;
     abstract comparator(): Comparator<T>;
-    abstract head(item: T): SortedList<T>;
-    abstract tail(item: T): SortedList<T>;
+    abstract head(index: number): SortedList<T>;
+    abstract tail(index: number): SortedList<T>;
     abstract slice(start?: number, end?: number): SortedList<T>;
     abstract toUnsorted(): List<T>;
 }
@@ -86,6 +86,6 @@ export abstract class SortedSet<T> extends Set<T> {
     abstract slice(fromKey: T, toKey: T): SortedSet<T>;
 }
 
-export { ArrayList, TreeList } from "./list";
-export { PriorityQueue } from "./queue";
-export { HashSet, TreeSet } from "./set";
+export * from "./list";
+export * from "./queue";
+export * from "./set";

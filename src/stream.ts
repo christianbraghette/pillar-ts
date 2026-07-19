@@ -1,12 +1,12 @@
 import { Collection, Stack } from "./collections";
 import { Dictionary } from "./dictionary";
 import { BiConsumer, BiFunctional, BiPredicate, Comparator, Executor, Functional, Supplier, TriFunctional, UnaryOperator } from "./functional";
-import { ArrayList, TreeList } from "./list";
+import { ArrayList, SortedArrayList } from "./list";
 import { HashMap, TreeMap } from "./map";
-import { AsyncIterableObject, FunctionalObject, IterableObject } from "./objects";
+import { AsyncIterableObject, FunctionalObject } from "./objects";
 import { Optional, Some } from "./optional";
 import { PriorityQueue } from "./queue";
-import { HashSet, TreeSet } from "./set";
+import { HashSet } from "./set";
 
 
 export type Collector<T, C> = Functional<Iterable<T>, C>;
@@ -20,16 +20,12 @@ export class Collectors {
         return (iterable: Iterable<T>) => new ArrayList(iterable);
     }
 
-    public static TreeList<T>(compareFn: Comparator<T>): (iterable: Iterable<T>) => TreeList<T> {
-        return (iterable: Iterable<T>) => new TreeList(compareFn, iterable);
+    public static SortedArrayList<T>(compareFn: Comparator<T>): (iterable: Iterable<T>) => SortedArrayList<T> {
+        return (iterable: Iterable<T>) => new SortedArrayList(compareFn, iterable);
     }
 
     public static HashSet<T>(): (iterable: Iterable<T>) => HashSet<T> {
         return (iterable: Iterable<T>) => new HashSet(iterable);
-    }
-
-    public static TreeSet<T>(compareFn: Comparator<T>): (iterable: Iterable<T>) => TreeSet<T> {
-        return (iterable: Iterable<T>) => new TreeSet(compareFn, iterable);
     }
 
     public static PriorityQueue<T>(compareFn: Comparator<T>): (iterable: Iterable<T>) => PriorityQueue<T> {
@@ -240,6 +236,70 @@ class StreamConstructor<T> extends AsyncIterableObject<T> implements FunctionalO
         });
     }
 
+    public sort(compareFn: Comparator<T>): Stream<T> {
+        const source = this.#lock();
+        return new Stream(function* () {
+            yield* new SortedArrayList(compareFn, source);
+        })
+    }
+
+    public reverse(): BufferedStream<T> {
+        const source = this.#lock();
+        let buffer: Stack<T> | undefined;
+        return new BufferedStream(function* () {
+            if (!buffer) {
+                buffer = new ArrayList<T>();
+                const aux: Stack<T> = new ArrayList(source);
+                let item: Optional<T>
+                while (Some(item = aux.removeLast())) {
+                    buffer.add(item.get());
+                    yield item.get();
+                }
+            }
+            yield* buffer;
+        });
+    }
+
+    public distinct(): BufferedStream<T> {
+        const source = this.#lock();
+        const set = new HashSet<T>();
+        let loaded = false;
+        return new BufferedStream(function* () {
+            if (!loaded)
+                for (const value of source) {
+                    if (set.has(value)) continue;
+                    set.add(value);
+                    yield value;
+                }
+            else
+                yield* set;
+        });
+    }
+
+    public buffer(): BufferedStream<T> {
+        const source = this.#lock();
+        const buffer = new ArrayList<T>();
+        let loaded = false;
+        return new BufferedStream(function* () {
+            if (!loaded) {
+                for (const value of source) {
+                    buffer.add(value);
+                    yield value;
+                }
+                loaded = true;
+                return;
+            }
+            yield* buffer;
+        });
+    }
+
+    public stream(): Stream<T> {
+        const source = this.#lock();
+        return new Stream(() => source);
+    }
+
+    // Terminators
+
     public forEach(callbackfn: BiConsumer<T, number>): void {
         let i = 0;
         for (const value of this.#lock())
@@ -294,46 +354,6 @@ class StreamConstructor<T> extends AsyncIterableObject<T> implements FunctionalO
         return true;
     }
 
-    public sort(compareFn: Comparator<T>): Stream<T> {
-        const source = this.#lock();
-        return new Stream(function* () {
-            yield* new TreeList(compareFn, source);
-        })
-    }
-
-    public reverse(): BufferedStream<T> {
-        const source = this.#lock();
-        let buffer: Stack<T> | undefined;
-        return new BufferedStream(function* () {
-            if (!buffer) {
-                buffer = new ArrayList<T>();
-                const aux: Stack<T> = new ArrayList(source);
-                let item: Optional<T>
-                while (Some(item = aux.removeLast())) {
-                    buffer.add(item.get());
-                    yield item.get();
-                }
-            }
-            yield* buffer;
-        });
-    }
-
-    public distinct(): BufferedStream<T> {
-        const source = this.#lock();
-        const set = new HashSet<T>();
-        let loaded = false;
-        return new BufferedStream(function* () {
-            if (!loaded)
-                for (const value of source) {
-                    if (set.has(value)) continue;
-                    set.add(value);
-                    yield value;
-                }
-            else
-                yield* set;
-        });
-    }
-
     public count(): number {
         let count = 0;
         for (const _ of this.#lock())
@@ -359,28 +379,6 @@ class StreamConstructor<T> extends AsyncIterableObject<T> implements FunctionalO
         return max;
     }
 
-    public buffer(): BufferedStream<T> {
-        const source = this.#lock();
-        const buffer = new ArrayList<T>();
-        let loaded = false;
-        return new BufferedStream(function* () {
-            if (!loaded) {
-                for (const value of source) {
-                    buffer.add(value);
-                    yield value;
-                }
-                loaded = true;
-                return;
-            }
-            yield* buffer;
-        });
-    }
-
-    public tee(...funcs: Functional<BufferedStream<T>, Stream<T> | BufferedStream<T> | void>[]): ArrayList<Stream<T>> {
-        const buffer = this.buffer();
-        return new Stream(() => funcs.values()).map(fn => fn(buffer)?.stream()).filter<Stream<T>>(val => !!val).collect(ArrayList.from);
-    }
-
     public groupby<K>(keyFn: BiFunctional<T, number, K>): GroupByAccessor<K, T> {
         const cache = new HashMap<K, ArrayList<T>>();
         let i = 0;
@@ -393,9 +391,13 @@ class StreamConstructor<T> extends AsyncIterableObject<T> implements FunctionalO
         return cache;
     }
 
-    public stream(): Stream<T> {
-        const source = this.#lock();
-        return new Stream(() => source);
+    public collect<C>(collector: Collector<T, C>): C {
+        return collector(this.#lock());
+    }
+
+    public tee(...funcs: Functional<BufferedStream<T>, Stream<T> | BufferedStream<T> | void>[]): ArrayList<Stream<T>> {
+        const buffer = this.buffer();
+        return new Stream(() => funcs.values()).map(fn => fn(buffer)?.stream()).filter<Stream<T>>(val => !!val).collect(ArrayList.from);
     }
 
     public *sink(): IterableIterator<T> {
@@ -404,10 +406,6 @@ class StreamConstructor<T> extends AsyncIterableObject<T> implements FunctionalO
 
     public drain(): void {
         for (const _ of this.#lock());
-    }
-
-    public collect<C>(collector: Collector<T, C>): C {
-        return collector(this.#lock());
     }
 
     public toArray() {
@@ -430,7 +428,7 @@ class StreamConstructor<T> extends AsyncIterableObject<T> implements FunctionalO
         yield* this.sink()
     }
 
-    get [Symbol.toStringTag](): string { return "SyncStream"; }
+    get [Symbol.toStringTag](): string { return "Stream"; }
 
     public static join<S>(...iterables: Iterable<S>[]): Stream<S[]> {
         const iterators = iterables.map(val => val[Symbol.iterator]()) as Iterator<S>[];

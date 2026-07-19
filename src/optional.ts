@@ -10,11 +10,11 @@ class EmptyOptionalError extends Error {
 }
 
 export function Some<T>(optional: Optional<T>): boolean {
-    return optional.isSome();
+    return optional.some();
 }
 
 export function None<T>(optional: Optional<T>): boolean {
-    return optional.isNone();
+    return !optional.some();
 }
 
 export class Optional<T> extends IterableObject<T> implements FunctionalObject {
@@ -33,12 +33,8 @@ export class Optional<T> extends IterableObject<T> implements FunctionalObject {
         return this.#value!;
     }
 
-    public isSome(): boolean {
+    public some(): boolean {
         return this.#present;
-    }
-
-    public isNone(): boolean {
-        return !this.#present;
     }
 
     public or<S>(other: S): S | T {

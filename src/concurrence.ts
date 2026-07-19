@@ -80,13 +80,13 @@ export class Semaphore<T> {
     }
 
     public releaseAll(): void {
-        for(let node = this.#queue.remove(); node.isSome(); node = this.#queue.remove())
+        for(let node = this.#queue.remove(); node.some(); node = this.#queue.remove())
             node.get().resolve(LockConstructor.released(this.#supplier()));
         this.#count = this.#maxCount;
     }
 
     public rejectAll(): void {
-        for(let node = this.#queue.remove(); node.isSome(); node = this.#queue.remove())
+        for(let node = this.#queue.remove(); node.some(); node = this.#queue.remove())
             node.get().reject('reset');
         this.#count = this.#maxCount;
     }

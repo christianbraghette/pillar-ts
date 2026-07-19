@@ -34,18 +34,18 @@ export class Result<T extends Throwable<any>> extends IterableObject<Try<T>> imp
     }
 
     public ok(): boolean {
-        return this.#value.isSome();
+        return this.#value.some();
     }
 
     public catch(catcher: Consumer<Catch<T>>): this {
-        if (!this.#value.isSome()) {
+        if (!this.#value.some()) {
             catcher(this.#error ?? (new Error("Unknown error") as Catch<T>));
         }
         return this;
     }
 
     public then(consumer: Consumer<Try<T>>): this {
-        if (this.#value.isSome()) {
+        if (this.#value.some()) {
             consumer(this.#value.get());
         }
         return this;
@@ -70,11 +70,11 @@ export class Result<T extends Throwable<any>> extends IterableObject<Try<T>> imp
     }
 
     public filter(predicate: Predicate<Try<T>>): Result<T> {
-        if (!this.#value.isSome()) {
+        if (!this.#value.some()) {
             return this;
         }
         const filteredValue = this.#value.filter(predicate);
-        if (!filteredValue.isSome()) {
+        if (!filteredValue.some()) {
             const filterError = new Error("Value did not match predicate") as Catch<T>;
             return Result.#createRaw<T>(Optional.empty(), filterError);
         }
@@ -82,7 +82,7 @@ export class Result<T extends Throwable<any>> extends IterableObject<Try<T>> imp
     }
 
     public map<S>(fn: Functional<Try<T>, S>): Result<Throwable<Try<S>, Catch<T>>> {
-        if (!this.#value.isSome()) {
+        if (!this.#value.some()) {
             // Short-circuit: restituiamo un nuovo Result fallito istantaneamente
             return Result.#createRaw<any>(Optional.empty(), this.#error);
         }
@@ -95,7 +95,7 @@ export class Result<T extends Throwable<any>> extends IterableObject<Try<T>> imp
     }
 
     public flatMap<S extends Throwable<any>>(fn: Functional<Try<T>, S | Result<S>>): Result<Throwable<Try<S>, Catch<S> | Catch<T>>> {
-        if (!this.#value.isSome()) {
+        if (!this.#value.some()) {
             return Result.#createRaw<any>(Optional.empty(), this.#error);
         }
         try {

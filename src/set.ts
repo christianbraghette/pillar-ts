@@ -1,5 +1,5 @@
 import { Set, SortedSet, Collection, Stack } from "./collections";
-import { Comparator, TriFunctional } from "./functional";
+import { Comparator, TriConsumer, TriFunctional } from "./functional";
 import { Optional } from "./optional";
 import { Stream } from "./stream";
 import { NativeSet } from "./native";
@@ -8,27 +8,15 @@ import { ArrayList } from "./list";
 export class HashSet<T> extends Set<T> {
     #set: NativeSet<T>;
 
-    /**
-     * Creates a new HashSet.
-     * @param iterable An optional iterable of elements to initialize the set with.
-     */
     constructor(iterable?: Iterable<T>) {
         super();
         this.#set = new NativeSet(iterable);
     }
 
-    /**
-     * Gets the number of elements in the set.
-     */
     public get size(): number {
         return this.#set.size;
     }
 
-    /**
-     * Adds a new value to the set.
-     * @param items The values to add.
-     * @returns The HashSet instance for method chaining.
-     */
     public add(...items: T[]): number {
         const size = this.#set.size;
         for (const value of items)
@@ -36,11 +24,6 @@ export class HashSet<T> extends Set<T> {
         return this.#set.size - size;
     }
 
-    /**
-     * Checks if a value exists in the set.
-     * @param key The value to search for.
-     * @returns True if the value exists, false otherwise.
-     */
     public has(...items: T[]): boolean {
         if (items.length === 0) return false;
         for (const item of items)
@@ -49,11 +32,6 @@ export class HashSet<T> extends Set<T> {
         return true;
     }
 
-    /**
-     * Removes a value from the set.
-     * @param key The value to remove.
-     * @returns True if the element was successfully removed, false if it didn't exist.
-     */
     public delete(...items: T[]): number {
         const size = this.#set.size;
         for (const item of items)
@@ -61,17 +39,10 @@ export class HashSet<T> extends Set<T> {
         return size - this.#set.size;
     }
 
-    /**
-     * Removes all elements from the set.
-     */
     public clear(): void {
         this.#set.clear();
     }
 
-    /**
-     * Executes a provided function once for each element in the set.
-     * @param callbackfn Function to execute for each element.
-     */
     public forEach(callbackfn: (value: T, index: number, obj: this) => void): void {
         let i = 0;
         for (const value of this.#set) {
@@ -102,22 +73,12 @@ export class HashSet<T> extends Set<T> {
         }());
     }
 
-    /**
-     * Combines the current set with another iterable to create a new set containing all unique elements from both.
-     * @param other An iterable of elements to join with.
-     * @returns A new HashSet containing the union.
-     */
     public union(other: Set<T>): HashSet<T> {
         const result = new HashSet<T>(this);
         for (const item of other) result.add(item);
         return result;
     }
 
-    /**
-     * Creates a new set containing only the elements present in both the current set and the provided set.
-     * @param other The HashSet to intersect with.
-     * @returns A new HashSet containing the intersection.
-     */
     public intersection(other: Set<T>): HashSet<T> {
         const result = new HashSet<T>();
         for (const item of this)
@@ -125,11 +86,6 @@ export class HashSet<T> extends Set<T> {
         return result;
     }
 
-    /**
-     * Creates a new set containing elements that are in the current set but not in the provided set.
-     * @param other The HashSet to compare against.
-     * @returns A new HashSet containing the difference.
-     */
     public difference(other: Set<T>): HashSet<T> {
         const result = new HashSet<T>();
         for (const item of this)
@@ -137,11 +93,6 @@ export class HashSet<T> extends Set<T> {
         return result;
     }
 
-    /**
-     * Determines whether the current set is a subset of another set.
-     * @param other The potential superset.
-     * @returns True if all elements of the current set are in the other set.
-     */
     public isSubsetOf(other: Set<T>): boolean {
         if (this.size > other.size) return false;
         return this.stream().every(value => other.has(value));
@@ -200,7 +151,7 @@ export class CacheSet<T> extends HashSet<T> {
         }())
     }
 
-    override get [Symbol.toStringTag](): string { return "CacheSet"; }
+    public override get [Symbol.toStringTag](): string { return "CacheSet"; }
 
     public static override from<S>(iterable: Iterable<S>): CacheSet<S> {
         return new CacheSet(iterable);
@@ -211,335 +162,250 @@ export class CacheSet<T> extends HashSet<T> {
     }
 }
 
-enum Color {
-    RED,
-    BLACK
-}
-
-class TreeNode {
-    public left?: TreeNode;
-    public right?: TreeNode;
-    public parent?: TreeNode;
-    public color: Color = Color.RED;
+class TreeNode<T> {
+    public elements: T[] = [];
+    public children: TreeNode<T>[] = [];
+    public isLeaf: boolean = true;
 }
 
 export class TreeSet<T> extends SortedSet<T> {
     #size: number = 0;
-    #data = new WeakMap<TreeNode, T>();
-    #root?: TreeNode;
+    #root: TreeNode<T>;
     #compareFn: Comparator<T>;
+    readonly #M = 4
 
-    /**
-     * Creates a new TreeSet.
-     * @param compareFn A function used to determine the order of the elements. 
-     * It should return -1 if a < b, 1 if a > b, and 0 if they are equal.
-     * @param iterable An optional iterable of elements to initialize the set with.
-     */
     constructor(compareFn: Comparator<T>, iterable?: Iterable<T>) {
         super();
         this.#compareFn = compareFn;
-        for (const data of iterable ?? [])
+        this.#root = new TreeNode();
+        for (const data of iterable ?? []) {
             this.add(data);
+        }
     }
 
-    /**
-     * Gets the number of elements in the set.
-     */
     public get size(): number {
         return this.#size;
     }
 
-    /**
-     * Adds a new value to the set while maintaining sorted order.
-     * If the value is already present, the set remains unchanged.
-     * @param value The value to add.
-     * @returns added elements count.
-     */
     public add(...items: T[]): number {
-        const size = this.#size;
+        const initialSize = this.#size;
+
         for (const value of items) {
-            let y: TreeNode | undefined = undefined;
-            let x = this.#root;
+            const root = this.#root;
 
-            let duplicate = false;
-            while (x) {
-                y = x;
-                const comparison = this.#compareFn(value, this.#data.get(x)!);
-                if (comparison === 0) {
-                    duplicate = true;
-                    break;
-                }
-                x = comparison < 0 ? x.left : x.right;
-            }
-            if (duplicate)
-                continue;
-
-            const z = new TreeNode();
-            this.#data.set(z, value);
-            z.parent = y;
-
-            if (!y) {
-                this.#root = z;
-            } else if (this.#compareFn(value, this.#data.get(y)!) < 0) {
-                y.left = z;
-            } else {
-                y.right = z;
+            if (root.elements.length === this.#M - 1) {
+                const newRoot = new TreeNode<T>();
+                newRoot.isLeaf = false;
+                newRoot.children.push(root);
+                this.#root = newRoot;
+                this.#splitChild(newRoot, 0, root);
             }
 
-            this.#size++;
-            this.#fixInsert(z);
+            this.#insertNonFull(this.#root, value);
         }
-        return this.size - size;
+
+        return this.#size - initialSize;
     }
 
-    /**
-     * Checks if a value exists in the set using the comparison function.
-     * @param value The value to search for.
-     * @returns True if the value exists, false otherwise.
-     */
+    #insertNonFull(node: TreeNode<T>, value: T): void {
+        let i = node.elements.length - 1;
+
+        if (node.isLeaf) {
+            while (i >= 0 && this.#compareFn(value, node.elements[i]) < 0) {
+                i--;
+            }
+
+            if (i >= 0 && this.#compareFn(value, node.elements[i]) === 0) {
+                return;
+            }
+
+            node.elements.splice(i + 1, 0, value);
+            this.#size++;
+        } else {
+            while (i >= 0 && this.#compareFn(value, node.elements[i]) < 0) {
+                i--;
+            }
+
+            if (i >= 0 && this.#compareFn(value, node.elements[i]) === 0) {
+                return;
+            }
+
+            i++;
+            if (node.children[i].elements.length === this.#M - 1) {
+                this.#splitChild(node, i, node.children[i]);
+                if (this.#compareFn(value, node.elements[i]) > 0) {
+                    i++;
+                }
+            }
+            this.#insertNonFull(node.children[i], value);
+        }
+    }
+
+    #splitChild(parent: TreeNode<T>, index: number, child: TreeNode<T>): void {
+        const newChild = new TreeNode<T>();
+        newChild.isLeaf = child.isLeaf;
+
+        const medianIndex = 1;
+        const promotedElement = child.elements[medianIndex];
+
+        newChild.elements = child.elements.splice(medianIndex + 1);
+        child.elements.pop();
+
+        if (!child.isLeaf) {
+            newChild.children = child.children.splice(medianIndex + 1);
+        }
+
+        parent.elements.splice(index, 0, promotedElement);
+        parent.children.splice(index + 1, 0, newChild);
+    }
+
     public has(...items: T[]): boolean {
         if (items.length === 0) return false;
-        let i = items.length;
+
         for (const item of items) {
-            let current = this.#root;
+            let current: TreeNode<T> | undefined = this.#root;
+            let found = false;
+
             while (current) {
-                const currentVal = this.#data.get(current)!;
-                const comparison = this.#compareFn(item, currentVal);
-                if (comparison === 0) {
-                    i--;
+                let i = 0;
+                const len = current.elements.length;
+                while (i < len && this.#compareFn(item, current.elements[i]) > 0) {
+                    i++;
+                }
+
+                if (i < len && this.#compareFn(item, current.elements[i]) === 0) {
+                    found = true;
                     break;
                 }
-                current = comparison < 0 ? current.left : current.right;
+
+                current = current.isLeaf ? undefined : current.children[i];
             }
+            if (!found) return false;
         }
-        return i <= 0;
+        return true;
     }
 
-    /**
-     * Removes a value from the set and rebalances the tree structure.
-     * @param value The value to remove.
-     * @returns True if the element was successfully removed, false if it didn't exist.
-     */
     public delete(...items: T[]): number {
-        const size = this.#size;
-        for (const item of items) {
-            const z = this.#findNode(item);
-            if (!z) continue;
+        const initialSize = this.#size;
 
-            let y = z;
-            let x: TreeNode | undefined;
-            let yOriginalColor = y.color;
+        for (const value of items) {
+            if (this.#size === 0) continue;
 
-            if (!z.left) {
-                x = z.right;
-                this.#transplant(z, z.right);
-            } else if (!z.right) {
-                x = z.left;
-                this.#transplant(z, z.left);
-            } else {
-                y = this.#minimum(z.right);
-                yOriginalColor = y.color;
-                x = y.right;
-                if (y.parent === z) {
-                    if (x) x.parent = y;
-                } else {
-                    this.#transplant(y, y.right);
-                    y.right = z.right;
-                    if (y.right) y.right.parent = y;
-                }
-                this.#transplant(z, y);
-                y.left = z.left;
-                if (y.left) y.left.parent = y;
-                y.color = z.color;
-            }
+            this.#deleteTopDown(this.#root, value);
 
-            this.#size--;
-            if (yOriginalColor === Color.BLACK) {
-                this.#fixDelete(x, x?.parent);
+            if (this.#root.elements.length === 0 && !this.#root.isLeaf) {
+                this.#root = this.#root.children[0];
             }
         }
-        return size - this.#size;
+
+        return initialSize - this.#size;
     }
 
-    /**
-     * Removes all elements from the set.
-     */
-    public clear(): void {
-        this.#root = undefined;
-        this.#size = 0;
-    }
-
-    #findNode(value: T): TreeNode | undefined {
-        let current = this.#root;
-        while (current) {
-            const comparison = this.#compareFn(value, this.#data.get(current)!);
-            if (comparison === 0) return current;
-            current = comparison < 0 ? current.left : current.right;
-        }
-        return undefined;
-    }
-
-    #minimum(node: TreeNode): TreeNode {
-        while (node.left) node = node.left;
-        return node;
-    }
-
-    #transplant(u: TreeNode, v?: TreeNode): void {
-        if (!u.parent) this.#root = v;
-        else if (u === u.parent.left) u.parent.left = v;
-        else u.parent.right = v;
-        if (v) v.parent = u.parent;
-    }
-
-    #rotateLeft(x: TreeNode): void {
-        const y = x.right!;
-        x.right = y.left;
-        if (y.left) y.left.parent = x;
-        y.parent = x.parent;
-        if (!x.parent) this.#root = y;
-        else if (x === x.parent.left) x.parent.left = y;
-        else x.parent.right = y;
-        y.left = x;
-        x.parent = y;
-    }
-
-    #rotateRight(y: TreeNode): void {
-        const x = y.left!;
-        y.left = x.right;
-        if (x.right) x.right.parent = y;
-        x.parent = y.parent;
-        if (!y.parent) this.#root = x;
-        else if (y === y.parent.right) y.parent.right = x;
-        else y.parent.left = x;
-        x.right = y;
-        y.parent = x;
-    }
-
-    #fixInsert(z: TreeNode): void {
-        while (z.parent && z.parent.color === Color.RED) {
-            if (z.parent === z.parent.parent?.left) {
-                const uncle = z.parent.parent.right;
-                if (uncle && uncle.color === Color.RED) {
-                    z.parent.color = Color.BLACK;
-                    uncle.color = Color.BLACK;
-                    z.parent.parent.color = Color.RED;
-                    z = z.parent.parent;
-                } else {
-                    if (z === z.parent.right) {
-                        z = z.parent;
-                        this.#rotateLeft(z);
-                    }
-                    z.parent!.color = Color.BLACK;
-                    z.parent!.parent!.color = Color.RED;
-                    this.#rotateRight(z.parent!.parent!);
-                }
-            } else {
-                const uncle = z.parent.parent?.left;
-                if (uncle && uncle.color === Color.RED) {
-                    z.parent.color = Color.BLACK;
-                    uncle.color = Color.BLACK;
-                    z.parent.parent!.color = Color.RED;
-                    z = z.parent.parent!;
-                } else {
-                    if (z === z.parent.left) {
-                        z = z.parent;
-                        this.#rotateRight(z);
-                    }
-                    z.parent!.color = Color.BLACK;
-                    z.parent!.parent!.color = Color.RED;
-                    this.#rotateLeft(z.parent!.parent!);
-                }
-            }
-        }
-        if (this.#root) this.#root.color = Color.BLACK;
-    }
-
-    #fixDelete(x: TreeNode | undefined, xParent: TreeNode | undefined): void {
-        while (x !== this.#root && (!x || x.color === Color.BLACK)) {
-            if (xParent && x === xParent.left) {
-                let w = xParent.right;
-                if (w?.color === Color.RED) {
-                    w.color = Color.BLACK;
-                    xParent.color = Color.RED;
-                    this.#rotateLeft(xParent);
-                    w = xParent.right;
-                }
-                if ((!w?.left || w.left.color === Color.BLACK) && (!w?.right || w.right.color === Color.BLACK)) {
-                    if (w) w.color = Color.RED;
-                    x = xParent;
-                    xParent = x.parent;
-                } else {
-                    if (!w?.right || w.right.color === Color.BLACK) {
-                        if (w?.left) w.left.color = Color.BLACK;
-                        if (w) w.color = Color.RED;
-                        if (w) this.#rotateRight(w);
-                        w = xParent.right;
-                    }
-                    if (w) w.color = xParent.color;
-                    xParent.color = Color.BLACK;
-                    if (w?.right) w.right.color = Color.BLACK;
-                    this.#rotateLeft(xParent);
-                    x = this.#root;
-                }
-            } else if (xParent) {
-                let w = xParent.left;
-                if (w?.color === Color.RED) {
-                    w.color = Color.BLACK;
-                    xParent.color = Color.RED;
-                    this.#rotateRight(xParent);
-                    w = xParent.left;
-                }
-                if ((!w?.right || w.right.color === Color.BLACK) && (!w?.left || w.left.color === Color.BLACK)) {
-                    if (w) w.color = Color.RED;
-                    x = xParent;
-                    xParent = x.parent;
-                } else {
-                    if (!w?.left || w.left.color === Color.BLACK) {
-                        if (w?.right) w.right.color = Color.BLACK;
-                        if (w) w.color = Color.RED;
-                        if (w) this.#rotateLeft(w);
-                        w = xParent.left;
-                    }
-                    if (w) w.color = xParent.color;
-                    xParent.color = Color.BLACK;
-                    if (w?.left) w.left.color = Color.BLACK;
-                    this.#rotateRight(xParent);
-                    x = this.#root;
-                }
-            } else break;
-        }
-        if (x) x.color = Color.BLACK;
-    }
-
-
-    /**
-     * Executes a provided function once for each element in sorted order.
-     * @param callbackfn Function to execute for each element.
-     */
-    public forEach(callbackfn: (value: T, index: number, obj: this) => void): void {
+    #deleteTopDown(node: TreeNode<T>, value: T): void {
         let i = 0;
-        for (const value of this) {
-            callbackfn(value, i++, this);
+        const len = node.elements.length;
+        while (i < len && this.#compareFn(value, node.elements[i]) > 0) {
+            i++;
         }
+
+        if (i < len && this.#compareFn(value, node.elements[i]) === 0) {
+            if (node.isLeaf) {
+                node.elements.splice(i, 1);
+                this.#size--;
+            } else {
+                const leftChild = node.children[i];
+                const rightChild = node.children[i + 1];
+
+                if (leftChild.elements.length > 1) {
+                    const pred = this.#getExtreme(leftChild, "last");
+                    node.elements[i] = pred;
+                    this.#deleteTopDown(leftChild, pred);
+                } else if (rightChild.elements.length > 1) {
+                    const succ = this.#getExtreme(rightChild, "first");
+                    node.elements[i] = succ;
+                    this.#deleteTopDown(rightChild, succ);
+                } else {
+                    this.#mergeChildren(node, i);
+                    this.#deleteTopDown(leftChild, value);
+                }
+            }
+        } else {
+            if (node.isLeaf) return;
+
+            const child = node.children[i];
+
+            if (child.elements.length === 1) {
+                const leftSibling = i > 0 ? node.children[i - 1] : undefined;
+                const rightSibling = i < node.children.length - 1 ? node.children[i + 1] : undefined;
+
+                if (leftSibling && leftSibling.elements.length > 1) {
+                    child.elements.unshift(node.elements[i - 1]);
+                    node.elements[i - 1] = leftSibling.elements.pop()!;
+                    if (!child.isLeaf) {
+                        child.children.unshift(leftSibling.children.pop()!);
+                    }
+                } else if (rightSibling && rightSibling.elements.length > 1) {
+                    child.elements.push(node.elements[i]);
+                    node.elements[i] = rightSibling.elements.shift()!;
+                    if (!child.isLeaf) {
+                        child.children.push(rightSibling.children.shift()!);
+                    }
+                } else {
+                    if (leftSibling) {
+                        this.#mergeChildren(node, i - 1);
+                        this.#deleteTopDown(node.children[i - 1], value);
+                        return;
+                    } else {
+                        this.#mergeChildren(node, i);
+                    }
+                }
+            }
+            this.#deleteTopDown(node.children[i], value);
+        }
+    }
+
+    #mergeChildren(parent: TreeNode<T>, index: number): void {
+        const left = parent.children[index];
+        const right = parent.children[index + 1];
+        const promoted = parent.elements.splice(index, 1)[0];
+        parent.children.splice(index + 1, 1);
+
+        left.elements.push(promoted, ...right.elements);
+
+        if (!left.isLeaf) {
+            left.children.push(...right.children);
+        }
+    }
+
+    #getExtreme(node: TreeNode<T>, side: "first" | "last"): T {
+        let current = node;
+        while (!current.isLeaf) {
+            current = current.children[side === "first" ? 0 : current.children.length - 1];
+        }
+        return current.elements[side === "first" ? 0 : current.elements.length - 1];
     }
 
     public first(): Optional<T> {
-        if (!this.#root) {
-            return Optional.empty();
+        if (this.#size === 0) return Optional.empty();
+        let current = this.#root;
+        while (!current.isLeaf) {
+            current = current.children[0];
         }
-        const minNode = this.#minimum(this.#root);
-        return Optional.of(this.#data.get(minNode)!);
+        return Optional.of(current.elements[0]);
     }
 
     public last(): Optional<T> {
-        if (!this.#root) {
-            return Optional.empty();
+        if (this.#size === 0) return Optional.empty();
+        let current = this.#root;
+        while (!current.isLeaf) {
+            current = current.children[current.children.length - 1];
         }
-        let node = this.#root;
-        while (node.right) {
-            node = node.right;
-        }
-        return Optional.of(this.#data.get(node)!);
+        return Optional.of(current.elements[current.elements.length - 1]);
+    }
+
+    public clear(): void {
+        this.#root = new TreeNode<T>();
+        this.#size = 0;
     }
 
     public comparator(): Comparator<T> {
@@ -555,119 +421,109 @@ export class TreeSet<T> extends SortedSet<T> {
     }
 
     public slice(fromItem: T, toItem: T): TreeSet<T> {
-        if (this.#compareFn(fromItem, toItem) > 0) {
+        if (this.#compareFn(fromItem, toItem) > 0)
             return new TreeSet(this.#compareFn);
-        }
         return this.#createSubSet(fromItem, toItem);
     }
 
     #createSubSet(fromItem?: T, toItem?: T): TreeSet<T> {
         const subSet = new TreeSet<T>(this.#compareFn);
         for (const value of this) {
-            if (fromItem !== undefined && this.#compareFn(value, fromItem) < 0) {
-                continue;
-            }
-            if (toItem !== undefined && this.#compareFn(value, toItem) >= 0) {
-                continue;
-            }
+            if (fromItem !== undefined && this.#compareFn(value, fromItem) < 0) continue;
+            if (toItem !== undefined && this.#compareFn(value, toItem) >= 0) continue;
             subSet.add(value);
         }
         return subSet;
     }
 
-    /**
-     * Combines the current set with another iterable to create a new sorted set.
-     */
     public union(other: Set<T>): TreeSet<T> {
         const result = new TreeSet<T>(this.#compareFn, this);
         for (const item of other) result.add(item);
         return result;
     }
 
-    /**
-     * Creates a new set containing elements present in both this set and the provided set.
-     */
     public intersection(other: Set<T>): TreeSet<T> {
         const result = new TreeSet<T>(this.#compareFn);
-        for (const item of this) {
-            if (other.has(item)) result.add(item);
-        }
+        for (const item of this) { if (other.has(item)) result.add(item); }
         return result;
     }
 
-    /**
-     * Creates a new set containing elements present in this set but not in the other.
-     */
     public difference(other: Set<T>): TreeSet<T> {
         const result = new TreeSet<T>(this.#compareFn);
-        for (const item of this) {
-            if (!other.has(item)) result.add(item);
-        }
+        for (const item of this) { if (!other.has(item)) result.add(item); }
         return result;
     }
 
-    /**
-     * Determines whether all elements of this set are present in the other set.
-     */
     public isSubsetOf(other: Set<T>): boolean {
-        if (this.size > other.size) return false;
-        for (const value of this) {
-            if (!other.has(value)) return false;
-        }
+        if (this.size > other.size)
+            return false;
+
+        for (const item of this)
+            if (!other.has(item))
+                return false;
+
         return true;
     }
 
-    public map<S>(fn: TriFunctional<T, number, this, S>): Set<S> {
+    public forEach(consumer: TriConsumer<T, number, this>): void {
+        let index = 0;
+        for (const item of this)
+            consumer(item, index++, this);
+    }
+
+    public map<S>(fn: TriFunctional<T, number, this, S>): Collection<S> {
         const self = this;
-        return new HashSet(function* () {
-            let i = 0;
-            for (const value of self)
-                yield fn(value, i++, self);
+        return new ArrayList<S>(function* () {
+            let index = 0;
+            for (const item of self.iterator())
+                yield fn(item, index++, self);
         }());
     }
 
-    public flatMap<S>(fn: TriFunctional<T, number, this, S | Collection<S>>): Set<S> {
+    public flatMap<S>(fn: TriFunctional<T, number, this, S | Collection<S>>): Collection<S> {
         const self = this;
-        return new HashSet(function* () {
-            let i = 0;
-            for (const value of self.iterator()) {
-                const result = fn(value, i++, self);
-                if (result instanceof Collection)
-                    yield* result.iterator();
+        return new ArrayList<S>(function* () {
+            let index = 0;
+            for (const item of self.iterator()) {
+                const value = fn(item, index++, self);
+                if (value instanceof Collection)
+                    yield* value;
                 else
-                    yield result;
+                    yield value;
             }
         }());
     }
 
     public stream(): Stream<T> {
-        return new Stream(() => this);
-    };
+        return new Stream(this.pipe());
+    }
 
-    /**
-     * Default iterator that returns values in sorted order.
-     */
-    *[Symbol.iterator](): IterableIterator<T> {
-        const stack: Stack<TreeNode> = new ArrayList<TreeNode>();
-        let current = this.#root;
-        while (stack.size > 0 || current) {
-            while (current) {
-                stack.add(current);
-                current = current.left;
+    public *[Symbol.iterator](): IterableIterator<T> {
+        const stack: { node: TreeNode<T>; index: number }[] = [];
+        let current: TreeNode<T> | undefined = this.#root;
+        let idx = 0;
+
+        while (stack.length > 0 || current) {
+            if (current) {
+                stack.push({ node: current, index: idx });
+                current = current.isLeaf ? undefined : current.children[0];
+                idx = 0;
+            } else {
+                const state = stack.pop()!;
+                const node = state.node;
+                const i = state.index;
+
+                if (i < node.elements.length) {
+                    yield node.elements[i];
+                    stack.push({ node: node, index: i + 1 });
+                    current = node.isLeaf ? undefined : node.children[i + 1];
+                    idx = 0;
+                }
             }
-
-            const last = stack.removeLast();
-
-            if (!last.isSome())
-                return;
-
-            current = last.get();
-            yield this.#data.get(current)!;
-            current = current.right;
         }
     }
 
-    get [Symbol.toStringTag](): string { return "TreeSet"; }
+    public get [Symbol.toStringTag](): string { return "TreeSet"; }
 
     public static from<S>(compareFn: Comparator<S>, iterable: Iterable<S>): TreeSet<S> {
         return new TreeSet(compareFn, iterable);

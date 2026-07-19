@@ -235,342 +235,279 @@ export class CacheMap<K, V> extends HashMap<K, V> {
     }
 }
 
-enum Color { RED, BLACK }
-
-class BSTNode {
-    public left?: BSTNode;
-    public right?: BSTNode;
-    public parent?: BSTNode;
-    public color: Color = Color.RED;
+class BTreeNode<K, V> {
+    public entries: [K, V][] = [];
+    public children: BTreeNode<K, V>[] = [];
+    public isLeaf: boolean = true;
 }
 
 export class TreeMap<K, V> extends SortedMap<K, V> {
     #size: number = 0;
-    #values = new WeakMap<BSTNode, V>();
-    #keys = new WeakMap<BSTNode, K>();
-    #root?: BSTNode;
-    #compareFn: Comparator<K>
+    #root: BTreeNode<K, V>;
+    #compareFn: Comparator<K>;
+    readonly #M = 4;
 
-    /**
-     * Creates an instance of TreeMap.
-     * @param compareFn A function used to determine the order of the keys. It is expected to return
-     * a negative value if first argument is less than second, zero if equal, and a positive value otherwise.
-     * @param iterable An optional iterable (e.g., an Array of [key, value] pairs) to initialize the map.
-     */
     constructor(compareFn: Comparator<K>, iterable?: Iterable<[K, V]>) {
         super();
         this.#compareFn = compareFn;
-        for (const [key, value] of iterable ?? [])
+        this.#root = new BTreeNode<K, V>();
+        for (const [key, value] of iterable ?? []) {
             this.set(key, value);
+        }
     }
 
-    /**
-     * Returns the number of key-value pairs in the map.
-     */
     get size(): number {
         return this.#size;
-    };
+    }
 
-    /**
-     * Associates the specified value with the specified key in this map.
-     * If the map previously contained a mapping for the key, the old value is replaced.
-     * * 
-     * * @param key Key with which the specified value is to be associated.
-     * @param value Value to be associated with the specified key.
-     * @returns The TreeMap instance for method chaining.
-     */
     public set(key: K, value: V): this {
-        let y: BSTNode | undefined = undefined;
-        let x = this.#root;
-        let comparison = 0;
+        const root = this.#root;
 
-        while (x) {
-            y = x;
-            comparison = this.#compareFn(key, this.#keys.get(x)!);
-            if (comparison === 0) {
-                this.#values.set(x, value);
-                return this;
-            }
-            x = comparison < 0 ? x.left : x.right;
-        }
-
-        const z = new BSTNode();
-        this.#keys.set(z, key);
-        this.#values.set(z, value);
-        z.parent = y;
-
-        if (!y) {
-            this.#root = z;
-        } else if (this.#compareFn(key, this.#keys.get(y)!) < 0) {
-            y.left = z;
+        if (root.entries.length === this.#M - 1) {
+            const newRoot = new BTreeNode<K, V>();
+            newRoot.isLeaf = false;
+            newRoot.children.push(root);
+            this.#root = newRoot;
+            this.#splitChild(newRoot, 0, root);
+            this.#insertNonFull(newRoot, key, value);
         } else {
-            y.right = z;
+            this.#insertNonFull(root, key, value);
         }
 
-        z.color = Color.RED;
-        this.#size++;
-        this.#fixInsert(z);
         return this;
     }
 
-    public add(...entries: [K, V][]): number {
-        const size = this.#size;
-        for (const [key, value] of entries)
-            this.set(key, value);
-        return this.#size - size;
+    #insertNonFull(node: BTreeNode<K, V>, key: K, value: V): void {
+        let i = node.entries.length - 1;
+
+        if (node.isLeaf) {
+            while (i >= 0 && this.#compareFn(key, node.entries[i][0]) < 0) {
+                i--;
+            }
+
+            if (i >= 0 && this.#compareFn(key, node.entries[i][0]) === 0) {
+                node.entries[i][1] = value;
+                return;
+            }
+
+            node.entries.splice(i + 1, 0, [key, value]);
+            this.#size++;
+        } else {
+            while (i >= 0 && this.#compareFn(key, node.entries[i][0]) < 0) {
+                i--;
+            }
+
+            if (i >= 0 && this.#compareFn(key, node.entries[i][0]) === 0) {
+                node.entries[i][1] = value;
+                return;
+            }
+
+            i++;
+            if (node.children[i].entries.length === this.#M - 1) {
+                this.#splitChild(node, i, node.children[i]);
+                const cmp = this.#compareFn(key, node.entries[i][0]);
+                if (cmp > 0) {
+                    i++;
+                } else if (cmp === 0) {
+                    node.entries[i][1] = value;
+                    return;
+                }
+            }
+            this.#insertNonFull(node.children[i], key, value);
+        }
     }
 
-    /**
-     * Returns the value to which the specified key is mapped, 
-     * or undefined if this map contains no mapping for the key.
-     * @param key The key whose associated value is to be returned.
-     * @returns The value associated with the key, or undefined.
-     */
+    #splitChild(parent: BTreeNode<K, V>, index: number, child: BTreeNode<K, V>): void {
+        const newChild = new BTreeNode<K, V>();
+        newChild.isLeaf = child.isLeaf;
+
+        const medianIndex = Math.floor((this.#M - 1) / 2);
+        const promotedEntry = child.entries[medianIndex];
+
+        newChild.entries = child.entries.splice(medianIndex + 1);
+        child.entries.pop();
+
+        if (!child.isLeaf) {
+            newChild.children = child.children.splice(medianIndex + 1);
+        }
+
+        parent.entries.splice(index, 0, promotedEntry);
+        parent.children.splice(index + 1, 0, newChild);
+    }
+
+    public add(...entries: [K, V][]): number {
+        const initialSize = this.#size;
+        for (const [key, value] of entries) {
+            this.set(key, value);
+        }
+        return this.#size - initialSize;
+    }
+
     public get(key: K): Optional<V> {
-        const node = this.#findNode(key);
-        if (node && this.#values.has(node))
-            return Optional.of(this.#values.get(node)!);
+        let current: BTreeNode<K, V> | undefined = this.#root;
+
+        while (current) {
+            let i = 0;
+            const len = current.entries.length;
+            while (i < len && this.#compareFn(key, current.entries[i][0]) > 0) {
+                i++;
+            }
+
+            if (i < len && this.#compareFn(key, current.entries[i][0]) === 0) {
+                return Optional.of(current.entries[i][1]);
+            }
+
+            current = current.isLeaf ? undefined : current.children[i];
+        }
         return Optional.empty();
     }
 
-    /**
-     * Returns true if this map contains a mapping for the specified key.
-     * @param key The key whose presence in this map is to be tested.
-     * @returns Boolean indicating if the key exists.
-     */
     public has(...keys: K[]): boolean {
         if (keys.length === 0) return false;
-        for (const key of keys)
-            if (this.#findNode(key) === undefined)
-                return false;
+        for (const key of keys) {
+            let current: BTreeNode<K, V> | undefined = this.#root;
+            let found = false;
+
+            while (current) {
+                let i = 0;
+                const len = current.entries.length;
+                while (i < len && this.#compareFn(key, current.entries[i][0]) > 0) {
+                    i++;
+                }
+                if (i < len && this.#compareFn(key, current.entries[i][0]) === 0) {
+                    found = true;
+                    break;
+                }
+                current = current.isLeaf ? undefined : current.children[i];
+            }
+            if (!found) return false;
+        }
         return true;
     }
 
-    /**
-     * Removes the mapping for a key from this map if it is present.
-     * * 
-     * * @param key Key whose mapping is to be removed from the map.
-     * @returns True if the key was found and removed; false otherwise.
-     */
     public delete(...keys: K[]): number {
-        const size = this.#size;
+        const initialSize = this.#size;
+
         for (const key of keys) {
-            const z = this.#findNode(key);
-            if (!z) continue;
+            if (this.#size === 0) continue;
 
-            let y = z;
-            let x: BSTNode | undefined;
-            let yOriginalColor = y.color;
+            this.#deleteTopDown(this.#root, key);
 
-            if (!z.left) {
-                x = z.right;
-                this.#transplant(z, z.right);
-            } else if (!z.right) {
-                x = z.left;
-                this.#transplant(z, z.left);
-            } else {
-                y = this.#minimum(z.right);
-                yOriginalColor = y.color;
-                x = y.right;
-                if (y.parent === z) {
-                    if (x) x.parent = y;
-                } else {
-                    this.#transplant(y, y.right);
-                    y.right = z.right;
-                    if (y.right) y.right.parent = y;
-                }
-                this.#transplant(z, y);
-                y.left = z.left;
-                if (y.left) y.left.parent = y;
-                y.color = z.color;
-            }
-
-            this.#size--;
-            if (yOriginalColor === Color.BLACK) {
-                this.#fixDelete(x, x?.parent);
+            if (this.#root.entries.length === 0 && !this.#root.isLeaf) {
+                this.#root = this.#root.children[0];
             }
         }
-        return size - this.#size;
+
+        return initialSize - this.#size;
     }
 
-    /**
-     * Removes all of the mappings from this map.
-     */
+    #deleteTopDown(node: BTreeNode<K, V>, key: K): void {
+        let i = 0;
+        const len = node.entries.length;
+        while (i < len && this.#compareFn(key, node.entries[i][0]) > 0) {
+            i++;
+        }
+
+        const minKeys = Math.floor(this.#M / 2) - 1;
+
+        if (i < len && this.#compareFn(key, node.entries[i][0]) === 0) {
+            if (node.isLeaf) {
+                node.entries.splice(i, 1);
+                this.#size--;
+            } else {
+                const leftChild = node.children[i];
+                const rightChild = node.children[i + 1];
+
+                if (leftChild.entries.length > minKeys) {
+                    const pred = this.#getExtremeEntry(leftChild, "last");
+                    node.entries[i] = pred;
+                    this.#deleteTopDown(leftChild, pred[0]);
+                } else if (rightChild.entries.length > minKeys) {
+                    const succ = this.#getExtremeEntry(rightChild, "first");
+                    node.entries[i] = succ;
+                    this.#deleteTopDown(rightChild, succ[0]);
+                } else {
+                    this.#mergeChildren(node, i);
+                    this.#deleteTopDown(leftChild, key);
+                }
+            }
+        } else {
+            if (node.isLeaf) return;
+
+            const child = node.children[i];
+
+            if (child.entries.length === minKeys) {
+                const leftSibling = i > 0 ? node.children[i - 1] : undefined;
+                const rightSibling = i < node.children.length - 1 ? node.children[i + 1] : undefined;
+
+                if (leftSibling && leftSibling.entries.length > minKeys) {
+                    child.entries.unshift(node.entries[i - 1]);
+                    node.entries[i - 1] = leftSibling.entries.pop()!;
+                    if (!child.isLeaf) {
+                        child.children.unshift(leftSibling.children.pop()!);
+                    }
+                } else if (rightSibling && rightSibling.entries.length > minKeys) {
+                    child.entries.push(node.entries[i]);
+                    node.entries[i] = rightSibling.entries.shift()!;
+                    if (!child.isLeaf) {
+                        child.children.push(rightSibling.children.shift()!);
+                    }
+                } else {
+                    if (leftSibling) {
+                        this.#mergeChildren(node, i - 1);
+                        this.#deleteTopDown(node.children[i - 1], key);
+                        return;
+                    } else {
+                        this.#mergeChildren(node, i);
+                    }
+                }
+            }
+            this.#deleteTopDown(node.children[i], key);
+        }
+    }
+
+    #mergeChildren(parent: BTreeNode<K, V>, index: number): void {
+        const left = parent.children[index];
+        const right = parent.children[index + 1];
+        const promoted = parent.entries.splice(index, 1)[0];
+        parent.children.splice(index + 1, 1);
+
+        left.entries.push(promoted, ...right.entries);
+
+        if (!left.isLeaf) {
+            left.children.push(...right.children);
+        }
+    }
+
+    #getExtremeEntry(node: BTreeNode<K, V>, side: "first" | "last"): [K, V] {
+        let current = node;
+        while (!current.isLeaf) {
+            current = current.children[side === "first" ? 0 : current.children.length - 1];
+        }
+        return current.entries[side === "first" ? 0 : current.entries.length - 1];
+    }
+
     public clear(): void {
-        this.#root = undefined;
+        this.#root = new BTreeNode<K, V>();
         this.#size = 0;
     }
 
-    #findNode(key: K): BSTNode | undefined {
-        let current = this.#root;
-        while (current) {
-            const currentKey = this.#keys.get(current)!;
-            const comparison = this.#compareFn(key, currentKey);
-            if (comparison === 0) return current;
-            current = comparison < 0 ? current.left : current.right;
-        }
-        return undefined;
-    }
-
-    #minimum(node: BSTNode): BSTNode {
-        while (node.left) node = node.left;
-        return node;
-    }
-
-    #transplant(u: BSTNode, v?: BSTNode): void {
-        if (!u.parent) this.#root = v;
-        else if (u === u.parent.left) u.parent.left = v;
-        else u.parent.right = v;
-        if (v) v.parent = u.parent;
-    }
-
-    #rotateLeft(x: BSTNode): void {
-        const y = x.right!;
-        x.right = y.left;
-        if (y.left) y.left.parent = x;
-        y.parent = x.parent;
-        if (!x.parent) this.#root = y;
-        else if (x === x.parent.left) x.parent.left = y;
-        else x.parent.right = y;
-        y.left = x;
-        x.parent = y;
-    }
-
-    #rotateRight(y: BSTNode): void {
-        const x = y.left!;
-        y.left = x.right;
-        if (x.right) x.right.parent = y;
-        x.parent = y.parent;
-        if (!y.parent) this.#root = x;
-        else if (y === y.parent.right) y.parent.right = x;
-        else y.parent.left = x;
-        x.right = y;
-        y.parent = x;
-    }
-
-    #fixInsert(z: BSTNode): void {
-        while (z.parent && z.parent.color === Color.RED) {
-            if (z.parent === z.parent.parent?.left) {
-                const uncle = z.parent.parent.right;
-                if (uncle && uncle.color === Color.RED) {
-                    z.parent.color = Color.BLACK;
-                    uncle.color = Color.BLACK;
-                    z.parent.parent.color = Color.RED;
-                    z = z.parent.parent;
-                } else {
-                    if (z === z.parent.right) {
-                        z = z.parent;
-                        this.#rotateLeft(z);
-                    }
-                    z.parent!.color = Color.BLACK;
-                    z.parent!.parent!.color = Color.RED;
-                    this.#rotateRight(z.parent!.parent!);
-                }
-            } else {
-                const uncle = z.parent.parent?.left;
-                if (uncle && uncle.color === Color.RED) {
-                    z.parent.color = Color.BLACK;
-                    uncle.color = Color.BLACK;
-                    z.parent.parent!.color = Color.RED;
-                    z = z.parent.parent!;
-                } else {
-                    if (z === z.parent.left) {
-                        z = z.parent;
-                        this.#rotateRight(z);
-                    }
-                    z.parent!.color = Color.BLACK;
-                    z.parent!.parent!.color = Color.RED;
-                    this.#rotateLeft(z.parent!.parent!);
-                }
-            }
-        }
-        if (this.#root) this.#root.color = Color.BLACK;
-    }
-
-    #fixDelete(x: BSTNode | undefined, xParent: BSTNode | undefined): void {
-        while (x !== this.#root && (!x || x.color === Color.BLACK)) {
-            if (xParent && x === xParent.left) {
-                let w = xParent.right;
-                if (w?.color === Color.RED) {
-                    w.color = Color.BLACK;
-                    xParent.color = Color.RED;
-                    this.#rotateLeft(xParent);
-                    w = xParent.right;
-                }
-                if ((!w?.left || w.left.color === Color.BLACK) && (!w?.right || w.right.color === Color.BLACK)) {
-                    if (w) w.color = Color.RED;
-                    x = xParent;
-                    xParent = x.parent;
-                } else {
-                    if (!w?.right || w.right.color === Color.BLACK) {
-                        if (w?.left) w.left.color = Color.BLACK;
-                        if (w) w.color = Color.RED;
-                        if (w) this.#rotateRight(w);
-                        w = xParent.right;
-                    }
-                    if (w) w.color = xParent.color;
-                    xParent.color = Color.BLACK;
-                    if (w?.right) w.right.color = Color.BLACK;
-                    this.#rotateLeft(xParent);
-                    x = this.#root;
-                }
-            } else if (xParent) {
-                let w = xParent.left;
-                if (w?.color === Color.RED) {
-                    w.color = Color.BLACK;
-                    xParent.color = Color.RED;
-                    this.#rotateRight(xParent);
-                    w = xParent.left;
-                }
-                if ((!w?.right || w.right.color === Color.BLACK) && (!w?.left || w.left.color === Color.BLACK)) {
-                    if (w) w.color = Color.RED;
-                    x = xParent;
-                    xParent = x.parent;
-                } else {
-                    if (!w?.left || w.left.color === Color.BLACK) {
-                        if (w?.right) w.right.color = Color.BLACK;
-                        if (w) w.color = Color.RED;
-                        if (w) this.#rotateLeft(w);
-                        w = xParent.left;
-                    }
-                    if (w) w.color = xParent.color;
-                    xParent.color = Color.BLACK;
-                    if (w?.left) w.left.color = Color.BLACK;
-                    this.#rotateRight(xParent);
-                    x = this.#root;
-                }
-            } else break;
-        }
-        if (x) x.color = Color.BLACK;
-    }
-
-
-    /**
-     * Performs the specified action for each entry in this map in sorted order.
-     * @param callbackfn Function to execute for each entry.
-     */
-    public forEach(callbackfn: (value: V, key: K, obj: this) => void): void {
-        for (const [key, value] of this.entries()) {
-            callbackfn(value, key, this);
-        }
-    }
-
     public first(): Optional<K> {
-        if (!this.#root) {
-            return Optional.empty();
+        if (this.#size === 0) return Optional.empty();
+        let current = this.#root;
+        while (!current.isLeaf) {
+            current = current.children[0];
         }
-        return Optional.of(this.#keys.get(this.#minimum(this.#root))!);
+        return Optional.of(current.entries[0][0]);
     }
 
     public last(): Optional<K> {
-        if (!this.#root) {
-            return Optional.empty();
-        }
+        if (this.#size === 0) return Optional.empty();
         let current = this.#root;
-        while (current.right) {
-            current = current.right;
+        while (!current.isLeaf) {
+            current = current.children[current.children.length - 1];
         }
-        return Optional.of(this.#keys.get(current)!);
+        return Optional.of(current.entries[current.entries.length - 1][0]);
     }
 
     public comparator(): Comparator<K> {
@@ -618,12 +555,17 @@ export class TreeMap<K, V> extends SortedMap<K, V> {
         return subMap;
     }
 
+    public forEach(consumer: TriConsumer<V, K, this>): void {
+        for (const [key, value] of this.iterator())
+            consumer(value, key, this);
+    }
+
     public map<S>(fn: TriFunctional<V, K, this, S>): TreeMap<K, S> {
         const self = this;
         return new TreeMap(this.#compareFn, function* () {
             for (const [key, value] of self)
                 yield [key, fn(value, key, self)];
-        }())
+        }());
     }
 
     public flatMap<S>(fn: TriFunctional<V, K, this, S | Map<K, S>>): TreeMap<K, S> {
@@ -632,62 +574,50 @@ export class TreeMap<K, V> extends SortedMap<K, V> {
             for (const [key, value] of self.iterator()) {
                 const result = fn(value, key, self);
                 if (result instanceof Map)
-                    yield* result.iterator();
+                    yield* result.entries();
                 else
                     yield [key, result];
             }
-        }())
+        }());
     }
 
-    /**
-     * Returns a new Iterator object that contains the keys for each element in the map in sorted order.
-     */
     public keys(): Stream<K> {
         return Stream.from(this).map(([key]) => key);
     }
 
-    /**
-     * Returns a new Iterator object that contains the values for each element in the map in sorted order of their keys.
-     */
     public values(): Stream<V> {
         return Stream.from(this).map(([_, value]) => value);
     }
 
-    /**
-     * Returns a new Iterator object that contains the [key, value] pairs for each element in the map in sorted order.
-     */
     public entries(): Stream<[K, V]> {
         return Stream.from(this);
     }
 
-    /**
-     * Default iterator for the TreeMap, yielding [key, value] pairs in sorted order.
-     */
     *[Symbol.iterator](): IterableIterator<[K, V]> {
-        const stack: Stack<BSTNode> = new ArrayList<BSTNode>();
-        let current = this.#root;
+        const stack: { node: BTreeNode<K, V>; index: number }[] = [];
+        let current: BTreeNode<K, V> | undefined = this.#root;
+        let idx = 0;
 
-        while (stack.size > 0 || current) {
-            while (current) {
-                stack.add(current);
-                current = current.left;
+        while (stack.length > 0 || current) {
+            if (current) {
+                stack.push({ node: current, index: idx });
+                current = current.isLeaf ? undefined : current.children[0];
+                idx = 0;
+            } else {
+                const state = stack.pop()!;
+                const node = state.node;
+                const i = state.index;
+
+                if (i < node.entries.length) {
+                    yield node.entries[i];
+                    stack.push({ node: node, index: i + 1 });
+                    current = node.isLeaf ? undefined : node.children[i + 1];
+                    idx = 0;
+                }
             }
-
-            const last = stack.removeLast();
-
-            if (!last.isSome())
-                return;
-
-            current = last.get();
-            yield [this.#keys.get(current)!, this.#values.get(current)!];
-
-            current = current.right;
         }
     }
 
-    /**
-     * Tag used by Object.prototype.toString.
-     */
     get [Symbol.toStringTag](): string { return "TreeMap"; }
 
     public static from<R, S>(compareFn: Comparator<R>, iterable: Iterable<[R, S]>): TreeMap<R, S> {

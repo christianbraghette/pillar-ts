@@ -5,11 +5,7 @@ export * from "./utils"
 export * from "./stream";
 
 //Collections
-export {
-    Collection, List, Queue, Deque, Set,
-    SortedSet, Stack, ArrayList, TreeList,
-    PriorityQueue, HashSet, TreeSet,
-} from "./collections";
+export * from "./collections";
 
 //Maps
-export { Map, SortedMap, HashMap, TreeMap } from "./map";
+export * from "./map";
